@@ -1,0 +1,10 @@
+name: simple-agent
+model: claude-3-5-sonnet-20241022
+temperature: 0.7
+max_iterations: 10
+system_prompt: "You are a helpful assistant."
+tools:
+  - calculator
+  - web_search
+memory: sqlite
+max_tokens: 4096

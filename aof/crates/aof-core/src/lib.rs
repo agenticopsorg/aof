@@ -10,11 +10,19 @@ pub mod model;
 pub mod tool;
 
 // Re-export core types
-pub use agent::{Agent, AgentConfig, AgentContext, AgentMetadata};
+pub use agent::{
+    Agent, AgentConfig, AgentContext, AgentMetadata, ExecutionMetadata, Message, MessageRole,
+    ToolResult as AgentToolResult,
+};
 pub use error::{AofError, AofResult};
-pub use memory::{Memory, MemoryBackend, MemoryEntry};
-pub use model::{Model, ModelConfig, ModelProvider, ModelRequest, ModelResponse, StreamChunk};
-pub use tool::{Tool, ToolCall, ToolConfig, ToolExecutor, ToolResult};
+pub use memory::{Memory, MemoryBackend, MemoryEntry, MemoryQuery};
+pub use model::{
+    Model, ModelConfig, ModelProvider, ModelRequest, ModelResponse, RequestMessage, StopReason,
+    StreamChunk, ToolDefinition as ModelToolDefinition, Usage,
+};
+pub use tool::{
+    Tool, ToolCall, ToolConfig, ToolDefinition, ToolExecutor, ToolInput, ToolResult, ToolType,
+};
 
 /// Version information
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");

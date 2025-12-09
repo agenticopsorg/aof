@@ -18,6 +18,7 @@ thiserror = { workspace = true }
 tracing = { workspace = true }
 reqwest = { workspace = true, optional = true }
 bytes = { workspace = true }
+uuid = { workspace = true }
 
 [features]
 default = ["stdio", "sse"]

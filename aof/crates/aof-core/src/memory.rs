@@ -169,3 +169,147 @@ pub type MemoryBackendRef = Arc<dyn MemoryBackend>;
 
 /// Reference-counted memory
 pub type MemoryRef = Arc<dyn Memory>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_memory_entry_new() {
+        let entry = MemoryEntry::new("test-key", serde_json::json!({"value": 42}));
+
+        assert_eq!(entry.key, "test-key");
+        assert_eq!(entry.value, serde_json::json!({"value": 42}));
+        assert!(entry.timestamp > 0);
+        assert!(entry.metadata.is_empty());
+        assert!(entry.ttl.is_none());
+    }
+
+    #[test]
+    fn test_memory_entry_with_metadata() {
+        let entry = MemoryEntry::new("key", serde_json::json!(null))
+            .with_metadata("type", "session")
+            .with_metadata("agent", "test-agent");
+
+        assert_eq!(entry.metadata.get("type"), Some(&"session".to_string()));
+        assert_eq!(entry.metadata.get("agent"), Some(&"test-agent".to_string()));
+    }
+
+    #[test]
+    fn test_memory_entry_with_ttl() {
+        let entry = MemoryEntry::new("key", serde_json::json!(null))
+            .with_ttl(3600);
+
+        assert_eq!(entry.ttl, Some(3600));
+    }
+
+    #[test]
+    fn test_memory_entry_is_expired() {
+        // Entry without TTL should never expire
+        let entry_no_ttl = MemoryEntry::new("key", serde_json::json!(null));
+        assert!(!entry_no_ttl.is_expired());
+
+        // Entry with very long TTL should not be expired
+        let entry_long_ttl = MemoryEntry::new("key", serde_json::json!(null))
+            .with_ttl(3600); // 1 hour
+        assert!(!entry_long_ttl.is_expired());
+
+        // Create an entry with timestamp in the past to test expiry
+        let mut entry_expired = MemoryEntry::new("key", serde_json::json!(null))
+            .with_ttl(1); // 1 second TTL
+        // Set timestamp to 2 seconds ago (in milliseconds)
+        entry_expired.timestamp -= 2000;
+        assert!(entry_expired.is_expired());
+    }
+
+    #[test]
+    fn test_memory_entry_serialization() {
+        let entry = MemoryEntry::new("my-key", serde_json::json!({"data": "test"}))
+            .with_metadata("source", "api")
+            .with_ttl(60);
+
+        let json = serde_json::to_string(&entry).unwrap();
+        let deserialized: MemoryEntry = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.key, "my-key");
+        assert_eq!(deserialized.value, serde_json::json!({"data": "test"}));
+        assert_eq!(deserialized.metadata.get("source"), Some(&"api".to_string()));
+        assert_eq!(deserialized.ttl, Some(60));
+    }
+
+    #[test]
+    fn test_memory_query_default() {
+        let query = MemoryQuery::default();
+
+        assert!(query.prefix.is_none());
+        assert!(query.metadata.is_empty());
+        assert!(query.limit.is_none());
+        assert!(!query.include_expired);
+    }
+
+    #[test]
+    fn test_memory_query_matches_basic() {
+        let query = MemoryQuery::default();
+        let entry = MemoryEntry::new("key", serde_json::json!(null));
+
+        assert!(query.matches(&entry));
+    }
+
+    #[test]
+    fn test_memory_query_matches_metadata() {
+        let mut query = MemoryQuery::default();
+        query.metadata.insert("type".to_string(), "session".to_string());
+
+        // Entry without metadata shouldn't match
+        let entry_no_meta = MemoryEntry::new("key", serde_json::json!(null));
+        assert!(!query.matches(&entry_no_meta));
+
+        // Entry with matching metadata should match
+        let entry_match = MemoryEntry::new("key", serde_json::json!(null))
+            .with_metadata("type", "session");
+        assert!(query.matches(&entry_match));
+
+        // Entry with wrong metadata value shouldn't match
+        let entry_wrong = MemoryEntry::new("key", serde_json::json!(null))
+            .with_metadata("type", "permanent");
+        assert!(!query.matches(&entry_wrong));
+    }
+
+    #[test]
+    fn test_memory_query_matches_expired() {
+        // Create an entry with timestamp in the past to test expiry
+        let mut entry_expired = MemoryEntry::new("key", serde_json::json!(null))
+            .with_ttl(1); // 1 second TTL
+        // Set timestamp to 2 seconds ago (in milliseconds) to ensure it's expired
+        entry_expired.timestamp -= 2000;
+
+        // Default query excludes expired entries
+        let query_default = MemoryQuery::default();
+        assert!(!query_default.matches(&entry_expired));
+
+        // Query that includes expired entries
+        let query_include = MemoryQuery {
+            include_expired: true,
+            ..Default::default()
+        };
+        assert!(query_include.matches(&entry_expired));
+    }
+
+    #[test]
+    fn test_memory_query_serialization() {
+        let mut query = MemoryQuery {
+            prefix: Some("agent:".to_string()),
+            metadata: HashMap::new(),
+            limit: Some(100),
+            include_expired: true,
+        };
+        query.metadata.insert("type".to_string(), "context".to_string());
+
+        let json = serde_json::to_string(&query).unwrap();
+        let deserialized: MemoryQuery = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.prefix, Some("agent:".to_string()));
+        assert_eq!(deserialized.limit, Some(100));
+        assert!(deserialized.include_expired);
+    }
+}

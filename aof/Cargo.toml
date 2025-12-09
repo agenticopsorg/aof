@@ -6,7 +6,9 @@ members = [
     "crates/aof-llm",
     "crates/aof-runtime",
     "crates/aof-memory",
+    "crates/aof-triggers",
     "crates/aofctl",
+    "crates/aof-gui",
 ]
 
 [workspace.package]
@@ -54,12 +56,23 @@ parking_lot = "0.12"
 bytes = "1.5"
 memmap2 = "0.9"
 
+# UUID
+uuid = { version = "1.6", features = ["v4", "serde"] }
+
+# Date/Time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Tauri
+tauri = { version = "2.1", features = ["macos-private-api"] }
+tauri-build = "2.0"
+
 # Internal workspace dependencies
 aof-core = { path = "crates/aof-core" }
 aof-mcp = { path = "crates/aof-mcp" }
 aof-llm = { path = "crates/aof-llm" }
 aof-runtime = { path = "crates/aof-runtime" }
 aof-memory = { path = "crates/aof-memory" }
+aof-triggers = { path = "crates/aof-triggers" }
 
 [profile.release]
 opt-level = 3

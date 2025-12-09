@@ -1,0 +1,55 @@
+[package]
+name = "aof-gui"
+version = "0.1.0"
+edition = "2021"
+authors = ["AOF Team"]
+description = "Desktop GUI for Agent Operating Framework"
+license = "MIT OR Apache-2.0"
+
+[lib]
+name = "aof_gui"
+crate-type = ["lib", "cdylib", "staticlib"]
+
+[[bin]]
+name = "aof-gui"
+path = "src/main.rs"
+
+[dependencies]
+# Tauri
+tauri = { version = "2.1", features = ["macos-private-api"] }
+
+# Serialization
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+serde_yaml = "0.9"
+
+# Async runtime
+tokio = { version = "1.40", features = ["full"] }
+async-trait = "0.1"
+futures = "0.3"
+
+# Error handling
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Logging
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+# Utilities
+uuid = { version = "1.6", features = ["v4", "serde"] }
+chrono = { version = "0.4", features = ["serde"] }
+parking_lot = "0.12"
+
+# AOF Crates - direct integration
+aof-core = { path = "../aof-core" }
+aof-mcp = { path = "../aof-mcp" }
+aof-llm = { path = "../aof-llm" }
+aof-memory = { path = "../aof-memory" }
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

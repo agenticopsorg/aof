@@ -3,8 +3,9 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use tracing::{debug, info};
 
-use crate::transport::{McpRequest, McpResponse, McpTransport, TransportType};
-use aof_core::{AofError, AofResult, Tool, ToolConfig, ToolDefinition};
+use crate::transport::{McpRequest, McpTransport, TransportType};
+use aof_core::tool::ToolDefinition;
+use aof_core::{AofError, AofResult};
 
 /// MCP client
 pub struct McpClient {

@@ -1,16 +1,18 @@
 use async_trait::async_trait;
+use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
-use tracing::{debug, error};
+use tokio::sync::Mutex;
+use tracing::debug;
 
 use super::{McpRequest, McpResponse, McpTransport, TransportType};
 use aof_core::{AofError, AofResult};
 
 /// Stdio transport for MCP
 pub struct StdioTransport {
-    process: Option<Child>,
-    stdin: Option<ChildStdin>,
-    stdout: Option<BufReader<ChildStdout>>,
+    process: Arc<Mutex<Option<Child>>>,
+    stdin: Arc<Mutex<Option<ChildStdin>>>,
+    stdout: Arc<Mutex<Option<BufReader<ChildStdout>>>>,
     command: String,
     args: Vec<String>,
 }
@@ -18,9 +20,9 @@ pub struct StdioTransport {
 impl StdioTransport {
     pub fn new(command: impl Into<String>, args: Vec<String>) -> Self {
         Self {
-            process: None,
-            stdin: None,
-            stdout: None,
+            process: Arc::new(Mutex::new(None)),
+            stdin: Arc::new(Mutex::new(None)),
+            stdout: Arc::new(Mutex::new(None)),
             command: command.into(),
             args,
         }
@@ -50,22 +52,22 @@ impl McpTransport for StdioTransport {
             .take()
             .ok_or_else(|| AofError::mcp("Failed to get stdout"))?;
 
-        self.stdin = Some(stdin);
-        self.stdout = Some(BufReader::new(stdout));
-        self.process = Some(child);
+        *self.stdin.lock().await = Some(stdin);
+        *self.stdout.lock().await = Some(BufReader::new(stdout));
+        *self.process.lock().await = Some(child);
 
         Ok(())
     }
 
     async fn request(&self, request: &McpRequest) -> AofResult<McpResponse> {
-        let stdin = self
-            .stdin
-            .as_ref()
+        let mut stdin_guard = self.stdin.lock().await;
+        let stdin = stdin_guard
+            .as_mut()
             .ok_or_else(|| AofError::mcp("Transport not initialized"))?;
 
-        let stdout = self
-            .stdout
-            .as_ref()
+        let mut stdout_guard = self.stdout.lock().await;
+        let stdout = stdout_guard
+            .as_mut()
             .ok_or_else(|| AofError::mcp("Transport not initialized"))?;
 
         // Send request
@@ -108,7 +110,8 @@ impl McpTransport for StdioTransport {
     }
 
     async fn shutdown(&mut self) -> AofResult<()> {
-        if let Some(mut process) = self.process.take() {
+        let mut process_guard = self.process.lock().await;
+        if let Some(mut process) = process_guard.take() {
             debug!("Shutting down stdio transport");
             process
                 .kill()

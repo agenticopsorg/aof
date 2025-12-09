@@ -200,3 +200,144 @@ fn default_temperature() -> f32 {
 
 /// Reference-counted agent
 pub type AgentRef = Arc<dyn Agent>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_agent_context_new() {
+        let ctx = AgentContext::new("Hello, world!");
+        assert_eq!(ctx.input, "Hello, world!");
+        assert!(ctx.messages.is_empty());
+        assert!(ctx.state.is_empty());
+        assert!(ctx.tool_results.is_empty());
+    }
+
+    #[test]
+    fn test_agent_context_add_message() {
+        let mut ctx = AgentContext::new("test");
+        ctx.add_message(MessageRole::User, "user message");
+        ctx.add_message(MessageRole::Assistant, "assistant response");
+
+        assert_eq!(ctx.messages.len(), 2);
+        assert_eq!(ctx.messages[0].role, MessageRole::User);
+        assert_eq!(ctx.messages[0].content, "user message");
+        assert_eq!(ctx.messages[1].role, MessageRole::Assistant);
+        assert_eq!(ctx.messages[1].content, "assistant response");
+    }
+
+    #[test]
+    fn test_agent_context_state() {
+        let mut ctx = AgentContext::new("test");
+
+        // Set string state
+        ctx.set_state("name", "test_agent").unwrap();
+        let name: Option<String> = ctx.get_state("name");
+        assert_eq!(name, Some("test_agent".to_string()));
+
+        // Set numeric state
+        ctx.set_state("count", 42i32).unwrap();
+        let count: Option<i32> = ctx.get_state("count");
+        assert_eq!(count, Some(42));
+
+        // Get non-existent key
+        let missing: Option<String> = ctx.get_state("missing");
+        assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_message_role_serialization() {
+        let user = MessageRole::User;
+        let serialized = serde_json::to_string(&user).unwrap();
+        assert_eq!(serialized, "\"user\"");
+
+        let deserialized: MessageRole = serde_json::from_str("\"assistant\"").unwrap();
+        assert_eq!(deserialized, MessageRole::Assistant);
+    }
+
+    #[test]
+    fn test_agent_config_defaults() {
+        let yaml = r#"
+            name: test-agent
+            model: claude-3-5-sonnet
+        "#;
+        let config: AgentConfig = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(config.name, "test-agent");
+        assert_eq!(config.model, "claude-3-5-sonnet");
+        assert_eq!(config.max_iterations, 10); // default
+        assert_eq!(config.temperature, 0.7); // default
+        assert!(config.tools.is_empty());
+        assert!(config.system_prompt.is_none());
+    }
+
+    #[test]
+    fn test_agent_config_full() {
+        let yaml = r#"
+            name: full-agent
+            model: gpt-4
+            system_prompt: "You are a helpful assistant."
+            tools:
+              - read_file
+              - write_file
+            max_iterations: 20
+            temperature: 0.5
+            max_tokens: 4096
+        "#;
+        let config: AgentConfig = serde_yaml::from_str(yaml).unwrap();
+
+        assert_eq!(config.name, "full-agent");
+        assert_eq!(config.model, "gpt-4");
+        assert_eq!(config.system_prompt, Some("You are a helpful assistant.".to_string()));
+        assert_eq!(config.tools, vec!["read_file", "write_file"]);
+        assert_eq!(config.max_iterations, 20);
+        assert_eq!(config.temperature, 0.5);
+        assert_eq!(config.max_tokens, Some(4096));
+    }
+
+    #[test]
+    fn test_tool_result_serialization() {
+        let result = ToolResult {
+            tool_name: "test_tool".to_string(),
+            result: serde_json::json!({"output": "success"}),
+            success: true,
+            error: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("test_tool"));
+        assert!(json.contains("success"));
+
+        let deserialized: ToolResult = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.tool_name, "test_tool");
+        assert!(deserialized.success);
+    }
+
+    #[test]
+    fn test_execution_metadata_default() {
+        let meta = ExecutionMetadata::default();
+        assert_eq!(meta.input_tokens, 0);
+        assert_eq!(meta.output_tokens, 0);
+        assert_eq!(meta.execution_time_ms, 0);
+        assert_eq!(meta.tool_calls, 0);
+        assert!(meta.model.is_none());
+    }
+
+    #[test]
+    fn test_agent_metadata_serialization() {
+        let meta = AgentMetadata {
+            name: "test".to_string(),
+            description: "A test agent".to_string(),
+            version: "1.0.0".to_string(),
+            capabilities: vec!["coding".to_string(), "testing".to_string()],
+            extra: HashMap::new(),
+        };
+
+        let json = serde_json::to_string(&meta).unwrap();
+        let deserialized: AgentMetadata = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.name, "test");
+        assert_eq!(deserialized.capabilities.len(), 2);
+    }
+}

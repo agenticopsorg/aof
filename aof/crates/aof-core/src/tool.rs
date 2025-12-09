@@ -193,3 +193,156 @@ pub struct ToolDefinition {
 
 /// Reference-counted tool
 pub type ToolRef = Arc<dyn Tool>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tool_input_new() {
+        let args = serde_json::json!({"path": "/tmp/test.txt"});
+        let input = ToolInput::new(args.clone());
+
+        assert_eq!(input.arguments, args);
+        assert!(input.context.is_none());
+    }
+
+    #[test]
+    fn test_tool_input_with_context() {
+        let args = serde_json::json!({"command": "ls"});
+        let mut context = HashMap::new();
+        context.insert("cwd".to_string(), serde_json::json!("/home/user"));
+
+        let input = ToolInput::with_context(args.clone(), context);
+
+        assert_eq!(input.arguments, args);
+        assert!(input.context.is_some());
+        let ctx = input.context.unwrap();
+        assert_eq!(ctx.get("cwd"), Some(&serde_json::json!("/home/user")));
+    }
+
+    #[test]
+    fn test_tool_input_get_arg() {
+        let args = serde_json::json!({
+            "name": "test",
+            "count": 42,
+            "enabled": true
+        });
+        let input = ToolInput::new(args);
+
+        let name: String = input.get_arg("name").unwrap();
+        assert_eq!(name, "test");
+
+        let count: i32 = input.get_arg("count").unwrap();
+        assert_eq!(count, 42);
+
+        let enabled: bool = input.get_arg("enabled").unwrap();
+        assert!(enabled);
+    }
+
+    #[test]
+    fn test_tool_input_get_missing_arg() {
+        let args = serde_json::json!({});
+        let input = ToolInput::new(args);
+
+        let result: AofResult<String> = input.get_arg("missing");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_tool_result_success() {
+        let data = serde_json::json!({"output": "file created"});
+        let result = ToolResult::success(data.clone());
+
+        assert!(result.success);
+        assert_eq!(result.data, data);
+        assert!(result.error.is_none());
+        assert_eq!(result.execution_time_ms, 0);
+    }
+
+    #[test]
+    fn test_tool_result_error() {
+        let result = ToolResult::error("file not found");
+
+        assert!(!result.success);
+        assert_eq!(result.data, serde_json::Value::Null);
+        assert_eq!(result.error, Some("file not found".to_string()));
+    }
+
+    #[test]
+    fn test_tool_result_with_execution_time() {
+        let result = ToolResult::success(serde_json::json!({}))
+            .with_execution_time(150);
+
+        assert_eq!(result.execution_time_ms, 150);
+    }
+
+    #[test]
+    fn test_tool_config_serialization() {
+        let config = ToolConfig {
+            name: "read_file".to_string(),
+            description: "Read contents of a file".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "path": {"type": "string"}
+                },
+                "required": ["path"]
+            }),
+            tool_type: ToolType::Shell,
+            timeout_secs: 30,
+            extra: HashMap::new(),
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("read_file"));
+
+        let deserialized: ToolConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(deserialized.name, "read_file");
+        assert_eq!(deserialized.tool_type, ToolType::Shell);
+    }
+
+    #[test]
+    fn test_tool_type_default() {
+        let config: ToolConfig = serde_json::from_str(r#"{
+            "name": "test",
+            "description": "test tool",
+            "parameters": {}
+        }"#).unwrap();
+
+        assert_eq!(config.tool_type, ToolType::Mcp); // default
+    }
+
+    #[test]
+    fn test_tool_call_serialization() {
+        let call = ToolCall {
+            id: "call_123".to_string(),
+            name: "write_file".to_string(),
+            arguments: serde_json::json!({"path": "/tmp/out.txt", "content": "hello"}),
+        };
+
+        let json = serde_json::to_string(&call).unwrap();
+        let deserialized: ToolCall = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(deserialized.id, "call_123");
+        assert_eq!(deserialized.name, "write_file");
+    }
+
+    #[test]
+    fn test_tool_definition_serialization() {
+        let def = ToolDefinition {
+            name: "execute_shell".to_string(),
+            description: "Execute a shell command".to_string(),
+            parameters: serde_json::json!({
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string"}
+                }
+            }),
+        };
+
+        let json = serde_json::to_string(&def).unwrap();
+        assert!(json.contains("execute_shell"));
+        assert!(json.contains("Execute a shell command"));
+    }
+}
