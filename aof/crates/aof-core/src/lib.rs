@@ -1,0 +1,26 @@
+// AOF Core - Foundation types and traits for the Agentic Ops Framework
+//
+// This crate provides zero-cost abstractions for building high-performance
+// agentic systems targeting DevOps and SRE workflows.
+
+pub mod agent;
+pub mod error;
+pub mod memory;
+pub mod model;
+pub mod tool;
+
+// Re-export core types
+pub use agent::{Agent, AgentConfig, AgentContext, AgentMetadata};
+pub use error::{AofError, AofResult};
+pub use memory::{Memory, MemoryBackend, MemoryEntry};
+pub use model::{Model, ModelConfig, ModelProvider, ModelRequest, ModelResponse, StreamChunk};
+pub use tool::{Tool, ToolCall, ToolConfig, ToolExecutor, ToolResult};
+
+/// Version information
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Default context window size (tokens)
+pub const DEFAULT_CONTEXT_WINDOW: usize = 100_000;
+
+/// Maximum parallel tool calls
+pub const MAX_PARALLEL_TOOLS: usize = 10;
