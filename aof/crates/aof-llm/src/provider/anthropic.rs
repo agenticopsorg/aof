@@ -414,6 +414,7 @@ struct AnthropicTool {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct AnthropicResponse {
     id: String,
     #[serde(rename = "type")]
@@ -447,6 +448,7 @@ struct AnthropicUsage {
 // Streaming event types
 #[derive(Debug, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[allow(dead_code)]
 enum AnthropicStreamEvent {
     MessageStart {
         message: AnthropicStreamMessage,
@@ -471,6 +473,7 @@ enum AnthropicStreamEvent {
 }
 
 #[derive(Debug, Deserialize)]
+#[allow(dead_code)]
 struct AnthropicStreamMessage {
     id: String,
     role: String,

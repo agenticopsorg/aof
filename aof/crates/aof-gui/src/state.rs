@@ -4,6 +4,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
+use aof_runtime::RuntimeOrchestrator;
 use crate::commands::agent::AgentRuntime;
 use crate::commands::config::ConfigMetadata;
 use crate::commands::mcp::McpConnection;
@@ -22,6 +23,9 @@ pub struct AppState {
 
     /// Application settings
     pub settings: Arc<RwLock<AppSettings>>,
+
+    /// Runtime orchestrator for task execution
+    pub orchestrator: Arc<RuntimeOrchestrator>,
 }
 
 impl AppState {
@@ -31,6 +35,7 @@ impl AppState {
             configs: Arc::new(RwLock::new(HashMap::new())),
             mcp_connections: Arc::new(RwLock::new(HashMap::new())),
             settings: Arc::new(RwLock::new(AppSettings::default())),
+            orchestrator: Arc::new(RuntimeOrchestrator::with_max_concurrent(5)),
         }
     }
 }

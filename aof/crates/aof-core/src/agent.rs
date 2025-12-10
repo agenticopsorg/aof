@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{AofError, AofResult, Memory, Model, Tool};
+use crate::AofResult;
 
 /// Core agent trait - the foundation of AOF
 ///

@@ -3,5 +3,5 @@
 pub mod agent_executor;
 pub mod runtime;
 
-pub use agent_executor::AgentExecutor;
+pub use agent_executor::{AgentExecutor, StreamEvent};
 pub use runtime::Runtime;

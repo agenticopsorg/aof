@@ -1,0 +1,374 @@
+# Telegram Data Analytics Agent
+# Purpose: Interactive data analysis with chart generation
+# Usage: Triggered from Telegram chat commands
+
+name: telegram-analytics
+description: AI data analyst for Telegram with visualization capabilities
+
+# Model Configuration
+model:
+  provider: anthropic
+  name: claude-3-5-sonnet-20241022
+  temperature: 0.2  # Precise, analytical responses
+  max_tokens: 4096
+
+# System Prompt - Data analysis expertise
+system_prompt: |
+  You are a senior data analyst specializing in business intelligence and visualization. Your expertise:
+
+  **Core Competencies:**
+  📊 Statistical Analysis (descriptive, inferential, predictive)
+  📈 Data Visualization (charts, graphs, dashboards)
+  🔍 Pattern Recognition (trends, anomalies, correlations)
+  💡 Insight Generation (actionable recommendations)
+  🎯 Business Metrics (KPIs, OKRs, performance tracking)
+
+  **Analysis Framework:**
+
+  1. **Understand the Question**
+     - What metric are we analyzing?
+     - What time period?
+     - What's the business context?
+
+  2. **Explore the Data**
+     - Check data quality and completeness
+     - Identify outliers and anomalies
+     - Calculate summary statistics
+
+  3. **Analyze Patterns**
+     - Trends over time
+     - Comparisons across segments
+     - Correlations between variables
+     - Statistical significance
+
+  4. **Visualize Insights**
+     - Choose appropriate chart type
+     - Clear, labeled axes
+     - Highlight key findings
+     - Use color effectively
+
+  5. **Generate Recommendations**
+     - What do the numbers mean?
+     - What action should be taken?
+     - What to monitor going forward?
+
+  **Chart Types & Use Cases:**
+  - **Line Chart**: Trends over time
+  - **Bar Chart**: Comparisons across categories
+  - **Pie Chart**: Composition/proportions (max 5-6 slices)
+  - **Scatter Plot**: Correlations between variables
+  - **Heatmap**: Multi-dimensional patterns
+  - **Box Plot**: Distribution and outliers
+  - **Histogram**: Frequency distribution
+
+  **Communication Style:**
+  ✅ Start with the headline insight
+  ✅ Support with data and visuals
+  ✅ Explain statistical terms simply
+  ✅ Provide actionable recommendations
+  ✅ Use emojis for emphasis
+  ✅ Format numbers clearly (1.5M, 23.4%, $5.2K)
+
+  **Always:**
+  - Question assumptions
+  - Check for data quality issues
+  - Consider alternative explanations
+  - Acknowledge limitations
+  - Suggest follow-up analysis
+
+# MCP Tools
+mcp_servers:
+  # Telegram for chat interface
+  - name: telegram
+    command: npx
+    args:
+      - telegram-bot-mcp
+    env:
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN}
+
+  # Database for querying data
+  - name: postgres
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-postgres"
+    env:
+      DATABASE_URL: ${DATABASE_URL}
+
+  # Chart generation
+  - name: quickchart
+    command: npx
+    args:
+      - quickchart-mcp-server
+    env:
+      QUICKCHART_API_KEY: ${QUICKCHART_API_KEY}
+
+# Telegram Integration
+triggers:
+  - type: telegram
+    events:
+      - message
+      - callback_query
+
+    # Allowed users/groups
+    whitelist:
+      users: ${ALLOWED_USER_IDS}  # Comma-separated user IDs
+      groups: ${ALLOWED_GROUP_IDS}
+
+# Commands
+commands:
+  # Quick stats
+  - command: /stats
+    description: "Get quick statistics"
+    usage: "/stats [metric] [period]"
+    example: "/stats revenue today"
+
+  # Custom query
+  - command: /query
+    description: "Run custom SQL query"
+    usage: "/query SELECT..."
+    example: "/query SELECT COUNT(*) FROM orders WHERE status='completed'"
+
+  # Chart generation
+  - command: /chart
+    description: "Generate visualization"
+    usage: "/chart [type] [metric] [period]"
+    example: "/chart line revenue 7d"
+
+  # Dashboard
+  - command: /dashboard
+    description: "Get full dashboard"
+    usage: "/dashboard [name]"
+    example: "/dashboard sales"
+
+  # Trend analysis
+  - command: /trend
+    description: "Analyze trends"
+    usage: "/trend [metric] [period]"
+    example: "/trend users 30d"
+
+  # Compare periods
+  - command: /compare
+    description: "Compare time periods"
+    usage: "/compare [metric] [period1] vs [period2]"
+    example: "/compare revenue this_month vs last_month"
+
+  # Alert setup
+  - command: /alert
+    description: "Set up data alerts"
+    usage: "/alert [metric] [condition] [value]"
+    example: "/alert revenue < 10000"
+
+# Predefined Dashboards
+dashboards:
+  # Sales dashboard
+  - name: sales
+    metrics:
+      - name: Total Revenue
+        query: SELECT SUM(amount) FROM orders WHERE created_at > NOW() - INTERVAL '24 hours'
+        format: currency
+        trend: 7d
+
+      - name: Orders Today
+        query: SELECT COUNT(*) FROM orders WHERE DATE(created_at) = CURRENT_DATE
+        format: number
+        comparison: yesterday
+
+      - name: Average Order Value
+        query: SELECT AVG(amount) FROM orders WHERE created_at > NOW() - INTERVAL '30 days'
+        format: currency
+        trend: 30d
+
+      - name: Conversion Rate
+        query: |
+          SELECT
+            (COUNT(DISTINCT o.user_id)::FLOAT / COUNT(DISTINCT v.user_id) * 100) as conversion
+          FROM visits v
+          LEFT JOIN orders o ON v.user_id = o.user_id
+          WHERE v.created_at > NOW() - INTERVAL '7 days'
+        format: percentage
+
+    charts:
+      - type: line
+        title: Revenue Trend (30d)
+        query: |
+          SELECT DATE(created_at) as date, SUM(amount) as revenue
+          FROM orders
+          WHERE created_at > NOW() - INTERVAL '30 days'
+          GROUP BY DATE(created_at)
+          ORDER BY date
+
+      - type: bar
+        title: Top Products
+        query: |
+          SELECT product_name, COUNT(*) as sales
+          FROM order_items
+          WHERE created_at > NOW() - INTERVAL '7 days'
+          GROUP BY product_name
+          ORDER BY sales DESC
+          LIMIT 10
+
+  # User engagement dashboard
+  - name: engagement
+    metrics:
+      - name: Active Users (24h)
+        query: SELECT COUNT(DISTINCT user_id) FROM events WHERE created_at > NOW() - INTERVAL '24 hours'
+
+      - name: Daily Active Users
+        query: SELECT COUNT(DISTINCT user_id) FROM events WHERE DATE(created_at) = CURRENT_DATE
+
+      - name: Monthly Active Users
+        query: SELECT COUNT(DISTINCT user_id) FROM events WHERE created_at > NOW() - INTERVAL '30 days'
+
+      - name: Avg Session Duration
+        query: SELECT AVG(duration) FROM sessions WHERE created_at > NOW() - INTERVAL '7 days'
+        format: duration
+
+    charts:
+      - type: line
+        title: DAU/MAU Ratio
+        query: |
+          WITH dau AS (
+            SELECT DATE(created_at) as date, COUNT(DISTINCT user_id) as daily
+            FROM events
+            WHERE created_at > NOW() - INTERVAL '30 days'
+            GROUP BY DATE(created_at)
+          ),
+          mau AS (
+            SELECT DATE(created_at) as date, COUNT(DISTINCT user_id) as monthly
+            FROM events
+            WHERE created_at > NOW() - INTERVAL '30 days'
+            GROUP BY DATE(created_at)
+          )
+          SELECT dau.date, (dau.daily::FLOAT / mau.monthly * 100) as ratio
+          FROM dau JOIN mau ON dau.date = mau.date
+
+# Alerts Configuration
+alerts:
+  # Revenue alert
+  - name: low_revenue
+    metric: daily_revenue
+    condition: <
+    threshold: 10000
+    query: SELECT SUM(amount) FROM orders WHERE DATE(created_at) = CURRENT_DATE
+    message: |
+      ⚠️ *Low Revenue Alert*
+
+      Today's revenue: ${{value}}
+      Threshold: $10,000
+
+      Investigate marketing campaigns and traffic sources.
+
+  # Error rate alert
+  - name: high_error_rate
+    metric: error_rate
+    condition: >
+    threshold: 5
+    query: |
+      SELECT (COUNT(CASE WHEN status='error' THEN 1 END)::FLOAT / COUNT(*) * 100)
+      FROM requests
+      WHERE created_at > NOW() - INTERVAL '1 hour'
+    message: |
+      🚨 *High Error Rate Alert*
+
+      Current error rate: {{value}}%
+      Threshold: 5%
+
+      Check server logs and recent deployments.
+
+  # Signup alert
+  - name: signup_spike
+    metric: hourly_signups
+    condition: >
+    threshold: 100
+    query: SELECT COUNT(*) FROM users WHERE created_at > NOW() - INTERVAL '1 hour'
+    message: |
+      🎉 *Signup Spike Detected*
+
+      Signups in last hour: {{value}}
+      Normal rate: ~50/hour
+
+      Possible viral growth or marketing success!
+
+# Chart Templates
+chart_templates:
+  revenue_trend:
+    type: line
+    config:
+      backgroundColor: white
+      width: 800
+      height: 400
+      options:
+        title:
+          display: true
+          text: Revenue Trend
+        scales:
+          y:
+            beginAtZero: true
+            ticks:
+              callback: "function(value) { return '$' + value.toLocaleString(); }"
+
+  category_breakdown:
+    type: pie
+    config:
+      backgroundColor: white
+      width: 600
+      height: 600
+      options:
+        title:
+          display: true
+        plugins:
+          legend:
+            position: right
+
+# Memory for analysis context
+memory:
+  enabled: true
+  type: short_term
+  max_messages: 50
+  context_window: 24h
+
+# Example Conversations:
+#
+# User: /stats revenue today
+# Bot: 📊 *Revenue Statistics - Today*
+#
+#      Total: $45,234
+#      Orders: 127
+#      Avg Order: $356
+#
+#      📈 vs Yesterday: +12.3% ⬆️
+#      📅 vs Last Week: +5.7% ⬆️
+#
+#      🎯 On track to exceed monthly goal!
+#
+# User: /chart line revenue 7d
+# Bot: 📈 *Revenue Trend - Last 7 Days*
+#
+#      [Sends line chart image]
+#
+#      💡 **Key Insights:**
+#      • Peak: $52K on Dec 8 (Friday)
+#      • Avg: $43K per day
+#      • Trend: +8% week-over-week
+#      • Weekends show 23% lower sales
+#
+#      **Recommendation:**
+#      Run weekend promotions to boost sales on Sat/Sun
+#
+# User: /compare revenue this_month vs last_month
+# Bot: 📊 *Revenue Comparison*
+#
+#      This Month: $1.24M
+#      Last Month: $1.15M
+#
+#      Change: +$90K (+7.8%) ⬆️
+#
+#      [Sends bar chart comparing both months]
+#
+#      📈 **Growth Drivers:**
+#      1. New product launch (+$45K)
+#      2. Black Friday sales (+$30K)
+#      3. Increased traffic (+15K visitors)
+#
+#      🎯 **Forecast:**
+#      At current rate, expect $1.3M next month

@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-alpha.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-rc.[0-9]+'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., v1.0.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version
+        id: get_version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="${{ inputs.version }}"
+          else
+            VERSION=${GITHUB_REF#refs/tags/}
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Version: $VERSION"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          if [ -f "CHANGELOG.md" ]; then
+            # Extract changelog for this version
+            CHANGELOG=$(sed -n "/## \[${{ steps.get_version.outputs.version }}\]/,/## \[/p" CHANGELOG.md | sed '$ d')
+          else
+            CHANGELOG="Release ${{ steps.get_version.outputs.version }}"
+          fi
+          echo "changelog<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Create release"
+        continue-on-error: true
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ steps.get_version.outputs.version }}
+          release_name: Release ${{ steps.get_version.outputs.version }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: ${{ contains(steps.get_version.outputs.version, '-alpha') || contains(steps.get_version.outputs.version, '-beta') || contains(steps.get_version.outputs.version, '-rc') }}
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "create-release"
+        continue-on-error: true
+
+  build-release:
+    name: Build Release - ${{ matrix.os }}
+    needs: create-release
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact_name: aof
+            asset_name: aof-linux-amd64
+          - os: ubuntu-latest
+            target: aarch64-unknown-linux-gnu
+            artifact_name: aof
+            asset_name: aof-linux-arm64
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact_name: aof
+            asset_name: aof-macos-amd64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact_name: aof
+            asset_name: aof-macos-arm64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact_name: aof.exe
+            asset_name: aof-windows-amd64.exe
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross-compilation tools (Linux ARM64)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-${{ matrix.target }}-release-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.target }}-release-
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Build release for ${{ matrix.target }}"
+        continue-on-error: true
+
+      - name: Build release binary
+        run: cargo build --release --target ${{ matrix.target }} --workspace
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Strip binary (Unix)
+        if: runner.os != 'Windows'
+        run: strip target/${{ matrix.target }}/release/${{ matrix.artifact_name }}
+
+      - name: Create archive (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          tar czf ${{ matrix.asset_name }}.tar.gz ${{ matrix.artifact_name }}
+          cd -
+
+      - name: Create archive (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cd target/${{ matrix.target }}/release
+          7z a ${{ matrix.asset_name }}.zip ${{ matrix.artifact_name }}
+          cd -
+
+      - name: Upload Release Asset (Unix)
+        if: runner.os != 'Windows'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.asset_name }}.tar.gz
+          asset_name: ${{ matrix.asset_name }}.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Release Asset (Windows)
+        if: runner.os == 'Windows'
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: ./target/${{ matrix.target }}/release/${{ matrix.asset_name }}.zip
+          asset_name: ${{ matrix.asset_name }}.zip
+          asset_content_type: application/zip
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "build-release-${{ matrix.target }}"
+        continue-on-error: true
+
+  publish-crate:
+    name: Publish to crates.io
+    needs: build-release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Publish to crates.io"
+        continue-on-error: true
+
+      - name: Publish to crates.io
+        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
+        continue-on-error: true
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "publish-crate"
+        continue-on-error: true

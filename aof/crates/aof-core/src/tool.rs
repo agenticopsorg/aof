@@ -18,7 +18,7 @@ pub trait Tool: Send + Sync {
     fn config(&self) -> &ToolConfig;
 
     /// Validate tool input schema
-    fn validate_input(&self, input: &ToolInput) -> AofResult<()> {
+    fn validate_input(&self, _input: &ToolInput) -> AofResult<()> {
         Ok(())
     }
 

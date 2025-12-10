@@ -1,0 +1,269 @@
+# WhatsApp Sales Automation Agent
+# Purpose: Automated sales assistant with product recommendations
+# Usage: Triggered from WhatsApp Business API
+
+name: whatsapp-sales-bot
+description: AI sales agent for WhatsApp with interactive product selection
+
+# Model Configuration - Fast, conversational
+model:
+  provider: anthropic
+  name: claude-3-haiku-20240307
+  temperature: 0.8  # Friendly, personable responses
+  max_tokens: 1024  # Short, mobile-friendly messages
+
+# System Prompt - Sales expertise
+system_prompt: |
+  You are a skilled sales consultant for an e-commerce business. Your approach:
+
+  **Sales Methodology (SPIN Selling):**
+
+  1. **Situation** - Understand customer context
+     "What are you looking for today?"
+
+  2. **Problem** - Identify pain points
+     "What challenges are you facing with your current solution?"
+
+  3. **Implication** - Explore consequences
+     "How is that affecting your daily routine?"
+
+  4. **Need-Payoff** - Show value proposition
+     "How would it help if we could solve that for you?"
+
+  **Conversation Flow:**
+  1. Warm greeting with emoji 👋
+  2. Ask qualifying questions
+  3. Show relevant products (max 3-5 at a time)
+  4. Handle objections gracefully
+  5. Guide to checkout
+  6. Follow up after purchase
+
+  **Product Recommendation Engine:**
+  - Match products to customer needs
+  - Highlight best sellers and promotions
+  - Show price-appropriate options
+  - Upsell/cross-sell naturally
+  - Use scarcity when genuine ("Only 3 left!")
+
+  **Communication Style:**
+  ✅ Short messages (mobile-friendly)
+  ✅ Use emojis for personality
+  ✅ Ask one question at a time
+  ✅ Use WhatsApp formatting (*bold*, _italic_)
+  ✅ Send images/videos of products
+  ✅ Clear call-to-action buttons
+
+  **Objection Handling:**
+  - Price too high → Show value, offer alternatives
+  - Not sure → Provide social proof, reviews
+  - Need to think → Set follow-up reminder
+  - Out of stock → Suggest alternatives, waitlist
+
+  **Never:**
+  ❌ Spam with messages
+  ❌ Be pushy or aggressive
+  ❌ Share personal data
+  ❌ Make false claims
+  ❌ Send messages after 9 PM local time
+
+# MCP Tools
+mcp_servers:
+  - name: whatsapp
+    command: npx
+    args:
+      - whatsapp-business-mcp
+    env:
+      WHATSAPP_API_TOKEN: ${WHATSAPP_API_TOKEN}
+      WHATSAPP_PHONE_ID: ${WHATSAPP_PHONE_ID}
+
+  # Product catalog
+  - name: shopify
+    command: npx
+    args:
+      - shopify-mcp-server
+    env:
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY}
+      SHOPIFY_STORE_URL: ${SHOPIFY_STORE_URL}
+
+# WhatsApp Integration
+triggers:
+  - type: whatsapp
+    events:
+      - message.received
+      - message.read
+      - status.delivered
+
+# Interactive Components (WhatsApp Lists and Buttons)
+interactive:
+  enabled: true
+  components:
+    # Product category selection
+    - type: list
+      id: category_selection
+      title: "Browse Categories"
+      button_text: "View Products 🛍️"
+      sections:
+        - title: "Electronics"
+          rows:
+            - id: cat_phones
+              title: "📱 Smartphones"
+              description: "Latest iPhone, Samsung, etc."
+            - id: cat_laptops
+              title: "💻 Laptops"
+              description: "MacBook, Dell, HP"
+            - id: cat_accessories
+              title: "🎧 Accessories"
+              description: "Earbuds, cases, chargers"
+
+        - title: "Fashion"
+          rows:
+            - id: cat_men
+              title: "👔 Men's Clothing"
+            - id: cat_women
+              title: "👗 Women's Clothing"
+            - id: cat_shoes
+              title: "👟 Footwear"
+
+    # Quick action buttons
+    - type: buttons
+      id: quick_actions
+      buttons:
+        - id: view_cart
+          title: "🛒 View Cart"
+        - id: track_order
+          title: "📦 Track Order"
+        - id: talk_to_human
+          title: "💬 Chat with Agent"
+
+    # Checkout confirmation
+    - type: buttons
+      id: checkout
+      buttons:
+        - id: confirm_order
+          title: "✅ Confirm Order"
+        - id: modify_cart
+          title: "✏️ Edit Cart"
+        - id: cancel
+          title: "❌ Cancel"
+
+# Memory for customer context
+memory:
+  enabled: true
+  type: short_term
+  max_messages: 50
+  context_window: 48h  # Remember conversations for 2 days
+
+# Customer Segmentation
+segmentation:
+  # New customers
+  - segment: new_customer
+    trigger: first_message
+    flow: welcome_new_customer
+    offer: "15% off first order"
+
+  # Returning customers
+  - segment: returning_customer
+    trigger: previous_purchase
+    flow: personalized_recommendations
+    offer: "Free shipping on orders $50+"
+
+  # VIP customers
+  - segment: vip
+    trigger: lifetime_value > 1000
+    flow: premium_service
+    offer: "Exclusive early access to sales"
+
+  # Cart abandoners
+  - segment: abandoned_cart
+    trigger: cart_inactive_24h
+    flow: cart_recovery
+    offer: "10% off to complete your order"
+
+# Automated Sequences
+sequences:
+  # Welcome sequence
+  - name: welcome_new_customer
+    messages:
+      - delay: 0
+        content: |
+          Welcome to [Store Name]! 🎉
+
+          I'm here to help you find exactly what you need.
+
+          What brings you here today?
+        buttons: [browse_categories, search_products]
+
+  # Cart abandonment
+  - name: cart_recovery
+    messages:
+      - delay: 24h
+        content: |
+          Hi! 👋 I noticed you left some items in your cart.
+
+          Still interested? I can help you complete your order!
+        buttons: [view_cart, need_help]
+
+      - delay: 48h
+        condition: cart_still_active
+        content: |
+          Quick reminder! Your cart expires in 24 hours.
+
+          Plus, use code SAVE10 for 10% off! 🎁
+        buttons: [checkout_now]
+
+# Business Hours
+business_hours:
+  timezone: America/New_York
+  working_hours:
+    monday: "09:00-21:00"
+    tuesday: "09:00-21:00"
+    wednesday: "09:00-21:00"
+    thursday: "09:00-21:00"
+    friday: "09:00-21:00"
+    saturday: "10:00-18:00"
+    sunday: "10:00-18:00"
+
+  after_hours_message: |
+    Thanks for your message! 🌙
+
+    We're currently offline but I'll respond first thing tomorrow at 9 AM.
+
+    For urgent matters, check our FAQ: [link]
+
+# Example Conversation:
+#
+# Customer: "Hi"
+# Bot: "Hey there! 👋 Welcome to TechStore!
+#
+#       I can help you find the perfect tech products. What are you looking for today?
+#
+#       🔹 Smartphones
+#       🔹 Laptops
+#       🔹 Accessories
+#       🔹 Something else?"
+#
+# Customer: "Smartphone"
+# Bot: "Great choice! 📱
+#
+#       What's your budget range?
+#
+#       💰 Under $500
+#       💰 $500-$1000
+#       💰 Premium ($1000+)"
+#
+# Customer: "$500-$1000"
+# Bot: "Perfect! Here are our top picks in that range:
+#
+#       1️⃣ *iPhone 13* - $699
+#          5G, Great camera, iOS
+#          ⭐⭐⭐⭐⭐ (4.8/5)
+#
+#       2️⃣ *Samsung Galaxy S23* - $799
+#          Android, 120Hz display
+#          ⭐⭐⭐⭐⭐ (4.7/5)
+#
+#       3️⃣ *Google Pixel 8* - $699
+#          Best camera, Pure Android
+#          ⭐⭐⭐⭐⭐ (4.6/5)
+#
+#       Tap a number to learn more! 👆"

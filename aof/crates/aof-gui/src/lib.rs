@@ -44,6 +44,7 @@ pub fn run() {
             commands::agent_status,
             commands::agent_list,
             commands::agent_clear_completed,
+            commands::agent_orchestrator_stats,
             // Config commands
             commands::config_validate,
             commands::config_save,

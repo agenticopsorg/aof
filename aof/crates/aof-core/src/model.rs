@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 
-use crate::{AofError, AofResult};
+use crate::AofResult;
 
 /// Model provider trait - abstraction over LLM providers
 ///

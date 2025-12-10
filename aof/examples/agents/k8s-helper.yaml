@@ -1,0 +1,71 @@
+# Kubernetes Troubleshooting Agent
+# Purpose: Expert assistant for diagnosing and fixing Kubernetes cluster issues
+# Usage: aof run k8s-helper "Why is my pod crashing?"
+
+name: k8s-helper
+description: Kubernetes expert for troubleshooting clusters, pods, and deployments
+
+# Model Configuration
+model:
+  provider: anthropic
+  name: claude-3-5-sonnet-20241022
+  temperature: 0.3  # Lower temperature for precise technical responses
+  max_tokens: 4096
+
+# System Prompt - Defines agent's expertise and behavior
+system_prompt: |
+  You are a senior Kubernetes SRE with 10+ years of experience. Your expertise includes:
+
+  **Core Competencies:**
+  - Diagnosing pod crashes, OOMKills, and CrashLoopBackOff states
+  - Analyzing resource constraints (CPU, memory, storage)
+  - Debugging networking issues (CNI, Services, Ingress)
+  - Troubleshooting RBAC and security policies
+  - Optimizing cluster performance and reliability
+
+  **Response Format:**
+  1. Quick diagnosis with root cause
+  2. Step-by-step investigation commands
+  3. Recommended fixes with explanations
+  4. Prevention strategies
+
+  **Tools Available:**
+  - kubectl CLI via MCP server
+  - Access to cluster logs and events
+  - YAML validation and linting
+
+  Always explain WHY each command is needed and WHAT to look for in the output.
+  Use markdown formatting for better readability.
+
+# MCP Tools Integration
+mcp_servers:
+  - name: kubectl
+    command: npx
+    args:
+      - kubectl-mcp-server
+    env:
+      KUBECONFIG: ${KUBECONFIG}  # Use environment variable
+
+# Enable conversation memory for context retention
+memory:
+  enabled: true
+  type: short_term
+  max_messages: 20  # Remember last 20 exchanges
+
+# Example Usage:
+#
+# 1. Diagnose pod issues:
+#    aof run k8s-helper "My nginx pod keeps restarting"
+#
+# 2. Check cluster health:
+#    aof run k8s-helper "Is my cluster healthy?"
+#
+# 3. Debug networking:
+#    aof run k8s-helper "Service not routing to pods"
+#
+# Expected Output:
+# The agent will:
+# - Run kubectl commands to investigate
+# - Analyze logs and events
+# - Provide root cause analysis
+# - Suggest specific fixes with YAML patches

@@ -28,12 +28,14 @@ The `aof-triggers` crate enables users to interact with AOF agents, tasks, fleet
 
 ### Supported Platforms
 
-| Platform | Status | Features |
-|----------|--------|----------|
-| Telegram | ✅ Full | Text messages, inline keyboards, callback queries |
-| Slack | ✅ Full | Events API, Block Kit, interactive messages |
-| Discord | ✅ Full | Slash commands, embeds, components |
-| WhatsApp | ✅ Full | Cloud API, interactive buttons, lists |
+| Platform | Status | Features | File Size |
+|----------|--------|----------|-----------|
+| Telegram | ✅ Implemented | Text messages, inline keyboards, callback queries | 22KB |
+| Slack | ✅ Implemented | Events API, Block Kit, interactive messages | 18KB |
+| Discord | ✅ Implemented | Slash commands, embeds, components | 18KB |
+| WhatsApp | ✅ Implemented | Cloud API, interactive buttons, lists | 21KB |
+
+**Integration Status**: Platform adapters fully implemented. Runtime integration pending.
 
 ---
 
@@ -108,15 +110,16 @@ use aof_triggers::{
     TelegramPlatform, TelegramConfig,
     SlackPlatform, SlackConfig,
 };
-use aof_runtime::RuntimeOrchestrator;
+// Note: RuntimeOrchestrator integration pending
+// use aof_runtime::RuntimeOrchestrator;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Initialize runtime
-    let orchestrator = Arc::new(RuntimeOrchestrator::new());
+    // Initialize runtime (integration pending)
+    // let orchestrator = Arc::new(RuntimeOrchestrator::new());
 
     // Create handler
-    let mut handler = TriggerHandler::new(Arc::clone(&orchestrator));
+    let mut handler = TriggerHandler::new(/* orchestrator */);
 
     // Register Telegram
     let telegram = TelegramPlatform::new(TelegramConfig {

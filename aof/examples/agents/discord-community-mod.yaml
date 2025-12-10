@@ -1,0 +1,346 @@
+# Discord Community Moderation Agent
+# Purpose: Automated community management with role-based permissions
+# Usage: Triggered automatically from Discord events
+
+name: discord-community-mod
+description: AI community moderator for Discord servers
+
+# Model Configuration - Cost-effective for high volume
+model:
+  provider: openai
+  name: gpt-3.5-turbo
+  temperature: 0.5  # Balanced moderation decisions
+  max_tokens: 1024
+
+# System Prompt - Community management expertise
+system_prompt: |
+  You are a fair, consistent community moderator for a Discord server. Your responsibilities:
+
+  **Primary Duties:**
+  👥 Welcome new members warmly
+  🛡️ Enforce community guidelines
+  ⚠️ Warn/timeout/ban rule violators
+  ❓ Answer common questions
+  🎯 Guide users to appropriate channels
+  📊 Track community health metrics
+
+  **Moderation Framework:**
+
+  1. **Content Violations:**
+     - Spam → Delete + warn (3 strikes = timeout)
+     - NSFW in wrong channel → Delete + move + warn
+     - Hate speech → Immediate ban
+     - Harassment → Timeout + review
+     - Advertising → Delete + warn
+
+  2. **Escalation Levels:**
+     - Level 1: Friendly reminder
+     - Level 2: Official warning
+     - Level 3: 1-hour timeout
+     - Level 4: 24-hour timeout
+     - Level 5: Permanent ban + report
+
+  3. **Response Templates:**
+     - Always explain WHY action was taken
+     - Reference specific rule violated
+     - Provide path to appeal if applicable
+     - Be professional but approachable
+
+  **Channel Management:**
+  - #welcome → Greet new members, explain rules
+  - #general → Monitor for off-topic, spam
+  - #help → Answer questions, guide to docs
+  - #mod-alerts → Report serious violations
+
+  **Proactive Engagement:**
+  - Highlight helpful community members
+  - Start conversations when chat is quiet
+  - Share relevant updates and announcements
+  - Organize events and activities
+
+  **Never:**
+  ❌ Be rude or condescending
+  ❌ Take moderation actions personally
+  ❌ Argue with users publicly
+  ❌ Share private information
+  ❌ Bypass the appeals process
+
+# MCP Tools
+mcp_servers:
+  - name: discord
+    command: npx
+    args:
+      - discord-mcp-server
+    env:
+      DISCORD_BOT_TOKEN: ${DISCORD_BOT_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
+
+# Discord Integration
+triggers:
+  - type: discord
+    events:
+      - message.create
+      - member.join
+      - member.update
+      - message.delete
+      - message.bulk_delete
+
+    # Monitor specific channels
+    channels:
+      - general
+      - help
+      - off-topic
+      - showcase
+
+# Role-Based Permissions
+permissions:
+  # Admin commands
+  admin:
+    roles: [Admin, Owner]
+    commands:
+      - ban
+      - unban
+      - kick
+      - mute_server
+      - unmute_server
+      - set_slowmode
+      - bulk_delete
+
+  # Moderator commands
+  moderator:
+    roles: [Moderator, Admin, Owner]
+    commands:
+      - timeout
+      - warn
+      - delete_message
+      - move_to_channel
+      - role_assign
+
+  # Helper commands
+  helper:
+    roles: [Helper, Moderator, Admin, Owner]
+    commands:
+      - answer_questions
+      - guide_to_channel
+      - welcome_members
+
+  # Public commands
+  public:
+    roles: ["@everyone"]
+    commands:
+      - help
+      - faq
+      - rules
+      - report
+
+# Auto-Moderation Rules
+auto_moderation:
+  # Spam detection
+  - rule: spam_detection
+    enabled: true
+    conditions:
+      - same_message_count: 3
+        time_window: 10s
+      - message_rate: 10
+        time_window: 60s
+    action:
+      - delete_messages
+      - timeout: 5m
+      - notify: "#mod-alerts"
+
+  # Invite link blocking
+  - rule: block_invites
+    enabled: true
+    conditions:
+      - contains: discord.gg/
+      - contains: discord.com/invite/
+    exceptions:
+      roles: [Moderator, Admin]
+      channels: [partnerships]
+    action:
+      - delete_message
+      - warn_user
+
+  # Mass mention protection
+  - rule: mass_mention
+    enabled: true
+    conditions:
+      - mention_count: 5
+    action:
+      - delete_message
+      - timeout: 1h
+      - alert: admins
+
+  # Link filtering
+  - rule: link_filter
+    enabled: true
+    channels: [general, help]
+    conditions:
+      - contains_url: true
+    exceptions:
+      roles: [Trusted, Moderator, Admin]
+      domains:
+        - github.com
+        - stackoverflow.com
+        - docs.example.com
+    action:
+      - delete_message
+      - send_dm: "Links are only allowed in #links channel"
+
+# Welcome Message
+welcome:
+  enabled: true
+  channel: welcome
+  message: |
+    Welcome to **[Server Name]**, {{user}}! 🎉
+
+    We're glad to have you here! Here's how to get started:
+
+    📜 Read the rules in <#rules>
+    🎭 Pick your roles in <#roles>
+    👋 Introduce yourself in <#introductions>
+    ❓ Ask questions in <#help>
+
+    Have fun and be respectful! 😊
+
+  assign_roles:
+    - Member  # Auto-assign Member role
+
+  dm_welcome: true
+  dm_message: |
+    Hey {{user}}! 👋
+
+    Thanks for joining [Server Name]!
+
+    Quick tips:
+    • Use </help> to see bot commands
+    • Check pinned messages in channels
+    • Tag @Helper if you need assistance
+
+    See you in the server!
+
+# FAQ Auto-Responses
+faq:
+  enabled: true
+  trigger_patterns:
+    - pattern: "how (do i|to) .*(join|get) .*(role|rank)"
+      response: |
+        To get roles, head over to <#roles> and react to the message! 🎭
+
+    - pattern: "where .* (ask|post) .* (question|help)"
+      response: |
+        Questions go in <#help>! Our community loves to help! 😊
+
+    - pattern: "when .* (next|upcoming) .* event"
+      response: |
+        Check <#events> for upcoming activities! 📅
+
+    - pattern: "how .* (dm|message) .* mod"
+      response: |
+        Use `/report` or message @Moderator for mod assistance! 🛡️
+
+# Logging and Analytics
+logging:
+  enabled: true
+  channels:
+    # Moderation actions log
+    mod_log: mod-log
+    # Member join/leave log
+    member_log: member-log
+    # Message edit/delete log
+    message_log: message-log
+
+  track_metrics:
+    - new_members_per_day
+    - messages_per_channel
+    - moderation_actions
+    - active_users
+    - rule_violations
+
+# Scheduled Tasks
+scheduled:
+  # Daily activity summary
+  - schedule: "0 0 * * *"  # Midnight daily
+    task: post_daily_summary
+    channel: mod-log
+
+  # Weekly stats
+  - schedule: "0 0 * * 0"  # Sunday midnight
+    task: post_weekly_stats
+    channel: announcements
+
+  # Member milestone celebrations
+  - schedule: "0 */6 * * *"  # Every 6 hours
+    task: check_member_milestones
+    milestones: [100, 500, 1000, 5000, 10000]
+
+# Commands
+commands:
+  # Public commands
+  - name: help
+    description: Show available commands
+    usage: "/help [command]"
+    permissions: public
+
+  - name: rules
+    description: Display server rules
+    usage: "/rules"
+    permissions: public
+
+  - name: report
+    description: Report a user or message
+    usage: "/report @user [reason]"
+    permissions: public
+
+  # Moderator commands
+  - name: warn
+    description: Warn a user
+    usage: "/warn @user [reason]"
+    permissions: moderator
+
+  - name: timeout
+    description: Timeout a user
+    usage: "/timeout @user [duration] [reason]"
+    permissions: moderator
+
+  - name: clear
+    description: Bulk delete messages
+    usage: "/clear [count]"
+    permissions: moderator
+
+  # Admin commands
+  - name: ban
+    description: Ban a user
+    usage: "/ban @user [reason]"
+    permissions: admin
+
+  - name: slowmode
+    description: Set channel slowmode
+    usage: "/slowmode [seconds]"
+    permissions: admin
+
+# Example Scenarios:
+#
+# 1. New Member Joins:
+#    - Bot sends welcome message in #welcome
+#    - Auto-assigns "Member" role
+#    - Sends DM with quick start guide
+#
+# 2. Spam Detected:
+#    User: "BUY CRYPTO NOW!!!" (3 times in 5 seconds)
+#    Bot:
+#    - Deletes all 3 messages
+#    - Timeouts user for 5 minutes
+#    - Posts in #mod-log: "⚠️ User123 timed out for spam (3 identical messages)"
+#
+# 3. User Asks Question in Wrong Channel:
+#    User in #general: "How do I install Python?"
+#    Bot: "Hey! 👋 Questions go in <#help> - I've moved your question there!"
+#
+# 4. Rule Violation:
+#    User: Posts NSFW content in #general
+#    Bot:
+#    - Deletes message immediately
+#    - Times out user for 1 hour
+#    - DMs user: "You've been timed out for posting NSFW content outside of designated channels. Review our rules in #rules."
+#    - Logs to #mod-log: "🔴 User456 timed out (1h) - NSFW in #general"

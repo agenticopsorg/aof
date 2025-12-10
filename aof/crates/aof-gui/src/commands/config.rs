@@ -86,18 +86,46 @@ pub async fn config_validate(yaml_content: String) -> Result<ValidationResult, S
 
             // Warnings for best practices
             if cfg.system_prompt.is_none() {
-                warnings.push("No system prompt defined - agent will use default behavior".to_string());
+                warnings.push("No system prompt defined - agent will use default behavior. Consider adding a system prompt to guide agent behavior.".to_string());
             }
 
             if cfg.max_iterations > 50 {
                 warnings.push(format!(
-                    "High max_iterations ({}) may lead to long execution times",
+                    "High max_iterations ({}) may lead to long execution times and increased costs",
+                    cfg.max_iterations
+                ));
+            }
+
+            if cfg.max_iterations < 5 {
+                warnings.push(format!(
+                    "Low max_iterations ({}) might prevent complex tasks from completing",
                     cfg.max_iterations
                 ));
             }
 
             if cfg.tools.is_empty() {
-                warnings.push("No tools configured - agent will only use LLM responses".to_string());
+                warnings.push("No tools configured - agent will only use LLM responses without external tool capabilities.".to_string());
+            }
+
+            // Validate model name
+            if !cfg.model.starts_with("claude-") {
+                warnings.push(format!(
+                    "Model '{}' doesn't appear to be a Claude model. Currently only Claude models are supported.",
+                    cfg.model
+                ));
+            }
+
+            // Check temperature bounds
+            if cfg.temperature > 1.0 {
+                warnings.push(format!(
+                    "High temperature ({}) may produce more creative but less focused responses",
+                    cfg.temperature
+                ));
+            } else if cfg.temperature < 0.3 {
+                warnings.push(format!(
+                    "Low temperature ({}) may produce very deterministic but less creative responses",
+                    cfg.temperature
+                ));
             }
 
             let summary = ConfigSummary {

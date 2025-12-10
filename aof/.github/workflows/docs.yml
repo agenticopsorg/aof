@@ -1,0 +1,97 @@
+name: Documentation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build-docs:
+    name: Build Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Cache Cargo index
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-index-
+
+      - name: Cache target directory
+        uses: actions/cache@v4
+        with:
+          path: target
+          key: ${{ runner.os }}-docs-target-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-docs-target-
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Build documentation"
+        continue-on-error: true
+
+      - name: Build documentation
+        run: cargo doc --workspace --all-features --no-deps
+
+      - name: Add index redirect
+        run: echo '<meta http-equiv="refresh" content="0; url=aof/index.html">' > target/doc/index.html
+
+      - name: Deploy to GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./target/doc
+          force_orphan: true
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "build-docs"
+        continue-on-error: true
+
+  check-docs:
+    name: Check Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Check documentation warnings"
+        continue-on-error: true
+
+      - name: Check for documentation warnings
+        run: RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "check-docs"
+        continue-on-error: true

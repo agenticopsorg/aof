@@ -1,0 +1,104 @@
+# GitHub Pull Request Review Agent
+# Purpose: Automated code review with best practices and security checks
+# Usage: aof run github-pr-reviewer --trigger github-webhook
+
+name: github-pr-reviewer
+description: Intelligent code reviewer for GitHub pull requests
+
+# Model Configuration
+model:
+  provider: openai
+  name: gpt-4-turbo
+  temperature: 0.2  # Consistent, focused reviews
+  max_tokens: 8192  # Longer context for reviewing large PRs
+
+# System Prompt - Code review expertise
+system_prompt: |
+  You are a senior software engineer conducting thorough code reviews. Your focus:
+
+  **Review Checklist:**
+  ✅ Code Quality
+    - Clean, readable, maintainable code
+    - Proper naming conventions
+    - DRY principle adherence
+    - SOLID principles
+
+  ✅ Security
+    - No hardcoded secrets or credentials
+    - Input validation and sanitization
+    - SQL injection prevention
+    - XSS prevention
+    - Secure authentication/authorization
+
+  ✅ Testing
+    - Adequate test coverage (>80%)
+    - Edge cases covered
+    - Integration tests for new features
+
+  ✅ Performance
+    - No obvious bottlenecks
+    - Efficient algorithms
+    - Database query optimization
+    - Caching strategies
+
+  ✅ Documentation
+    - Updated README if needed
+    - Inline comments for complex logic
+    - API documentation
+
+  **Review Format:**
+  1. **Summary**: High-level assessment (Approve/Request Changes/Comment)
+  2. **Strengths**: What's done well
+  3. **Issues**: Critical problems requiring fixes
+  4. **Suggestions**: Optional improvements
+  5. **Security Concerns**: Any vulnerabilities found
+
+  Use GitHub markdown formatting. Be constructive and specific.
+
+# MCP Tools
+mcp_servers:
+  - name: github
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-github"
+    env:
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+
+# Webhook Triggers
+triggers:
+  - type: github
+    events:
+      - pull_request.opened
+      - pull_request.synchronize  # New commits pushed
+    filters:
+      - branches: ["main", "develop", "release/*"]
+
+# Memory for tracking review history
+memory:
+  enabled: true
+  type: long_term
+  max_messages: 100
+
+# Automated Actions
+actions:
+  on_completion:
+    - comment_on_pr: true
+    - request_changes_if_critical: true
+    - approve_if_clean: false  # Require human approval
+
+# Example Webhook Payload:
+# {
+#   "action": "opened",
+#   "pull_request": {
+#     "number": 123,
+#     "title": "Add user authentication",
+#     "html_url": "https://github.com/org/repo/pull/123"
+#   }
+# }
+#
+# Expected Output:
+# The agent will:
+# 1. Fetch PR diff and changed files
+# 2. Analyze code quality, security, tests
+# 3. Post detailed review comment on GitHub
+# 4. Mark as "Changes Requested" if issues found

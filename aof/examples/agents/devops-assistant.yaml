@@ -1,0 +1,193 @@
+# General DevOps Assistant Agent
+# Purpose: Comprehensive helper for DevOps tasks across multiple platforms
+# Usage: aof run devops-assistant "Deploy my app to production"
+
+name: devops-assistant
+description: Multi-tool DevOps expert for infrastructure, CI/CD, and cloud operations
+
+# Model Configuration
+model:
+  provider: openai
+  name: gpt-4
+  temperature: 0.4  # Balanced creativity and precision
+  max_tokens: 4096
+
+# Comprehensive System Prompt
+system_prompt: |
+  You are a DevOps architect with expertise across the entire infrastructure stack:
+
+  **Core Expertise:**
+  🏗️  Infrastructure as Code (Terraform, CloudFormation, Pulumi)
+  🐳  Containerization (Docker, Kubernetes, Helm)
+  ☁️  Cloud Platforms (AWS, GCP, Azure)
+  🔄  CI/CD Pipelines (GitHub Actions, GitLab CI, Jenkins)
+  📊  Monitoring & Observability (Prometheus, Grafana, DataDog)
+  🔒  Security & Compliance (IAM, Secrets Management, Policies)
+  🗄️  Databases (RDS, DynamoDB, PostgreSQL, MongoDB)
+  🌐  Networking (VPC, Load Balancers, CDN, DNS)
+
+  **Workflow Philosophy:**
+  1. **Understand the Goal** - What's the business objective?
+  2. **Assess Current State** - What infrastructure exists?
+  3. **Design Solution** - What's the best approach?
+  4. **Implement Incrementally** - Small, safe changes
+  5. **Validate & Monitor** - Verify everything works
+  6. **Document** - Leave clear trail for team
+
+  **Best Practices:**
+  ✅ Infrastructure as Code - No manual changes
+  ✅ GitOps - Version control everything
+  ✅ Immutable Infrastructure - Replace, don't modify
+  ✅ Least Privilege - Minimal necessary permissions
+  ✅ Defense in Depth - Multiple security layers
+  ✅ Observability First - Logs, metrics, traces
+  ✅ Cost Optimization - Right-size resources
+
+  **Response Format:**
+  1. **Analysis**: Current situation assessment
+  2. **Recommendation**: Best approach with pros/cons
+  3. **Implementation**: Step-by-step commands/scripts
+  4. **Validation**: How to verify success
+  5. **Monitoring**: What to watch going forward
+  6. **Rollback**: How to undo if needed
+
+  Always explain the "why" behind recommendations.
+
+# Multiple MCP Servers for comprehensive tooling
+mcp_servers:
+  # Kubernetes management
+  - name: kubectl
+    command: npx
+    args:
+      - kubectl-mcp-server
+    env:
+      KUBECONFIG: ${KUBECONFIG}
+
+  # AWS cloud services
+  - name: aws
+    command: npx
+    args:
+      - aws-mcp-server
+    env:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION:-us-east-1}
+
+  # GitHub for CI/CD and repos
+  - name: github
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-github"
+    env:
+      GITHUB_TOKEN: ${GITHUB_TOKEN}
+
+  # Terraform for IaC
+  - name: terraform
+    command: npx
+    args:
+      - terraform-mcp-server
+    env:
+      TF_VAR_environment: ${ENVIRONMENT:-dev}
+
+  # PostgreSQL database
+  - name: postgres
+    command: npx
+    args:
+      - "@modelcontextprotocol/server-postgres"
+    env:
+      DATABASE_URL: ${DATABASE_URL}
+
+  # Slack for notifications
+  - name: slack
+    command: npx
+    args:
+      - slack-mcp-server
+    env:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+
+# Memory for complex multi-step operations
+memory:
+  enabled: true
+  type: long_term
+  max_messages: 100
+  persistence: true
+  namespace: devops
+
+# Predefined Workflows
+workflows:
+  # Complete application deployment
+  - name: deploy_application
+    steps:
+      - check_prerequisites
+      - build_docker_image
+      - push_to_registry
+      - update_kubernetes_manifests
+      - apply_deployment
+      - verify_health
+      - update_dns
+      - notify_team
+
+  # Infrastructure provisioning
+  - name: provision_infrastructure
+    steps:
+      - validate_terraform
+      - plan_changes
+      - request_approval
+      - apply_terraform
+      - configure_monitoring
+      - setup_alerts
+      - document_resources
+
+  # Disaster recovery
+  - name: disaster_recovery
+    steps:
+      - assess_damage
+      - restore_from_backup
+      - verify_data_integrity
+      - update_dns_failover
+      - notify_stakeholders
+      - create_incident_report
+
+# Environment-specific configurations
+environments:
+  dev:
+    auto_approve: true
+    require_confirmation: false
+    notifications: slack-dev-ops
+
+  staging:
+    auto_approve: false
+    require_confirmation: true
+    notifications: slack-staging
+
+  production:
+    auto_approve: false
+    require_confirmation: true
+    require_approval_count: 2
+    notifications: slack-production-alerts
+
+# Example Commands:
+#
+# 1. Deploy Application:
+#    aof run devops-assistant "Deploy API v2.1.0 to production"
+#
+# 2. Provision Infrastructure:
+#    aof run devops-assistant "Create a new VPC with public/private subnets"
+#
+# 3. Debug Issue:
+#    aof run devops-assistant "Why is RDS connection timing out?"
+#
+# 4. Optimize Costs:
+#    aof run devops-assistant "Analyze and reduce AWS costs"
+#
+# 5. Security Audit:
+#    aof run devops-assistant "Audit IAM permissions for over-privileged roles"
+#
+# Expected Output:
+# The agent will:
+# - Analyze current state using multiple tools (kubectl, aws-cli, etc.)
+# - Provide detailed recommendations with reasoning
+# - Generate ready-to-use scripts and configurations
+# - Execute changes with safety checks
+# - Validate results and setup monitoring
+# - Document all actions in memory for audit trail

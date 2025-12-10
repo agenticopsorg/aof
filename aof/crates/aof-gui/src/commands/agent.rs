@@ -1,11 +1,10 @@
-// Agent Commands - Tauri handlers for agent operations
+// Agent Commands - Tauri handlers for agent operations with aof-runtime integration
 
-use aof_core::{AgentConfig, AgentContext, ExecutionMetadata, Message, MessageRole};
+use aof_core::{AgentConfig, AgentContext, ExecutionMetadata, MessageRole, ModelConfig, ModelProvider};
+use aof_llm::ProviderFactory;
+use aof_runtime::{AgentExecutor, Task, TaskStatus};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
 use tauri::{Emitter, State};
-use tokio::sync::RwLock;
 use uuid::Uuid;
 
 use crate::state::AppState;
@@ -35,6 +34,7 @@ pub struct AgentStatusResponse {
     pub metadata: Option<ExecutionMetadataResponse>,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
+    pub error: Option<String>,
 }
 
 /// Execution metadata for frontend
@@ -70,6 +70,18 @@ pub enum AgentStatus {
     Stopped,
 }
 
+impl From<TaskStatus> for AgentStatus {
+    fn from(status: TaskStatus) -> Self {
+        match status {
+            TaskStatus::Pending => AgentStatus::Pending,
+            TaskStatus::Running => AgentStatus::Running,
+            TaskStatus::Completed => AgentStatus::Completed,
+            TaskStatus::Failed => AgentStatus::Failed,
+            TaskStatus::Cancelled => AgentStatus::Stopped,
+        }
+    }
+}
+
 /// Stored agent runtime information
 #[derive(Debug, Clone)]
 pub struct AgentRuntime {
@@ -98,13 +110,17 @@ pub async fn agent_run(
     let agent_id = Uuid::new_v4().to_string();
     let agent_name = config.name.clone();
 
+    // Validate API key from environment
+    let api_key = std::env::var("ANTHROPIC_API_KEY")
+        .map_err(|_| "ANTHROPIC_API_KEY environment variable not set. Please configure your API key.".to_string())?;
+
     // Create agent runtime entry
     let runtime = AgentRuntime {
         id: agent_id.clone(),
         name: agent_name.clone(),
         config: config.clone(),
-        status: AgentStatus::Running,
-        output: vec![format!("Starting agent: {}", agent_name)],
+        status: AgentStatus::Pending,
+        output: vec![format!("Initializing agent: {}", agent_name)],
         metadata: None,
         started_at: Some(chrono::Utc::now()),
         finished_at: None,
@@ -118,10 +134,24 @@ pub async fn agent_run(
     }
 
     // Emit event to frontend
-    let _ = window.emit("agent-started", serde_json::json!({
-        "agent_id": agent_id,
-        "name": agent_name,
-    }));
+    let _ = window.emit(
+        "agent-started",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "name": agent_name,
+        }),
+    );
+
+    // Create task for orchestrator
+    let task = Task::new(
+        agent_id.clone(),
+        format!("Execute agent: {}", agent_name),
+        agent_name.clone(),
+        request.input.clone(),
+    );
+
+    // Submit task to orchestrator
+    let handle = state.orchestrator.submit_task(task);
 
     // Spawn background task for agent execution
     let state_clone = state.inner().clone();
@@ -130,7 +160,15 @@ pub async fn agent_run(
     let input = request.input.clone();
 
     tokio::spawn(async move {
-        execute_agent(agent_id_clone, config, input, state_clone, window_clone).await;
+        execute_agent_with_runtime(
+            agent_id_clone,
+            config,
+            input,
+            api_key,
+            state_clone,
+            window_clone,
+        )
+        .await;
     });
 
     Ok(AgentRunResponse {
@@ -140,84 +178,174 @@ pub async fn agent_run(
     })
 }
 
-/// Internal agent execution logic
-async fn execute_agent(
+/// Internal agent execution logic using aof-runtime
+async fn execute_agent_with_runtime(
     agent_id: String,
     config: AgentConfig,
     input: String,
+    api_key: String,
     state: AppState,
     window: tauri::Window,
 ) {
+    // Update status to running
+    {
+        let mut agents = state.agents.write().await;
+        if let Some(runtime) = agents.get_mut(&agent_id) {
+            runtime.status = AgentStatus::Running;
+            runtime.output.push(format!(
+                "[{}] Starting agent execution...",
+                chrono::Utc::now().format("%H:%M:%S")
+            ));
+        }
+    }
+
+    // Emit status update
+    let _ = window.emit(
+        "agent-output",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "content": format!("Starting execution with model: {}", config.model),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        }),
+    );
+
+    // Create LLM model
+    let model_config = ModelConfig {
+        model: config.model.clone(),
+        provider: ModelProvider::Anthropic,
+        api_key: Some(api_key.clone()),
+        endpoint: None,
+        temperature: config.temperature,
+        max_tokens: config.max_tokens,
+        timeout_secs: 60,
+        headers: std::collections::HashMap::new(),
+        extra: std::collections::HashMap::new(),
+    };
+
+    let model = match ProviderFactory::create(model_config).await {
+        Ok(m) => m,
+        Err(e) => {
+            let error_msg = format!("Failed to create model: {}", e);
+            handle_execution_error(&agent_id, &error_msg, &state, &window).await;
+            return;
+        }
+    };
+
+    // Create agent executor
+    let executor = AgentExecutor::new(
+        config.clone(),
+        model,
+        None, // TODO: Add tool executor support
+        None, // TODO: Add memory support
+    );
+
     // Create agent context
     let mut ctx = AgentContext::new(&input);
     ctx.add_message(MessageRole::User, &input);
 
-    // Simulate agent execution with output streaming
-    // In a real implementation, this would use aof-runtime
-    let start_time = std::time::Instant::now();
-
-    // Emit output chunks
-    for i in 0..5 {
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
-
-        let output_line = format!(
-            "[{}] Agent '{}' processing step {}/5...",
-            chrono::Utc::now().format("%H:%M:%S"),
-            config.name,
-            i + 1
-        );
-
-        // Update state
-        {
-            let mut agents = state.agents.write().await;
-            if let Some(runtime) = agents.get_mut(&agent_id) {
-                runtime.output.push(output_line.clone());
-            }
-        }
-
-        // Emit to frontend
-        let _ = window.emit("agent-output", serde_json::json!({
+    // Emit progress update
+    let _ = window.emit(
+        "agent-output",
+        serde_json::json!({
             "agent_id": agent_id,
-            "content": output_line,
+            "content": "Calling LLM model...",
             "timestamp": chrono::Utc::now().to_rfc3339(),
-        }));
-    }
+        }),
+    );
+
+    // Execute agent
+    let start_time = std::time::Instant::now();
+    let result = executor.execute(&mut ctx).await;
 
     let execution_time = start_time.elapsed().as_millis() as u64;
 
-    // Create final result
-    let result = format!(
-        "Agent '{}' completed successfully.\n\nInput: {}\n\nModel: {}\nTemperature: {}\nMax Iterations: {}",
-        config.name,
-        input,
-        config.model,
-        config.temperature,
-        config.max_iterations
-    );
+    // Handle execution result
+    match result {
+        Ok(output) => {
+            // Stream output chunks to frontend
+            let output_lines: Vec<&str> = output.lines().collect();
+            for (i, line) in output_lines.iter().enumerate() {
+                if !line.trim().is_empty() {
+                    let _ = window.emit(
+                        "agent-output",
+                        serde_json::json!({
+                            "agent_id": agent_id,
+                            "content": line,
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        }),
+                    );
+                }
 
-    // Update final state
+                // Add small delay for natural streaming effect
+                if i < output_lines.len() - 1 {
+                    tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+                }
+            }
+
+            // Update final state
+            {
+                let mut agents = state.agents.write().await;
+                if let Some(runtime) = agents.get_mut(&agent_id) {
+                    runtime.status = AgentStatus::Completed;
+                    runtime.output.push(format!(
+                        "[{}] Agent completed successfully",
+                        chrono::Utc::now().format("%H:%M:%S")
+                    ));
+                    runtime.output.push(output.clone());
+                    runtime.finished_at = Some(chrono::Utc::now());
+                    runtime.metadata = Some(ctx.metadata.clone());
+                }
+            }
+
+            // Emit completion event
+            let _ = window.emit(
+                "agent-completed",
+                serde_json::json!({
+                    "agent_id": agent_id,
+                    "result": output,
+                    "execution_time_ms": execution_time,
+                    "metadata": ExecutionMetadataResponse::from(ctx.metadata),
+                }),
+            );
+        }
+        Err(e) => {
+            let error_msg = format!("Execution failed: {}", e);
+            handle_execution_error(&agent_id, &error_msg, &state, &window).await;
+        }
+    }
+}
+
+/// Handle execution errors with proper state updates and events
+async fn handle_execution_error(
+    agent_id: &str,
+    error_msg: &str,
+    state: &AppState,
+    window: &tauri::Window,
+) {
+    // Update state
     {
         let mut agents = state.agents.write().await;
-        if let Some(runtime) = agents.get_mut(&agent_id) {
-            runtime.status = AgentStatus::Completed;
-            runtime.output.push(result.clone());
+        if let Some(runtime) = agents.get_mut(agent_id) {
+            runtime.status = AgentStatus::Failed;
             runtime.finished_at = Some(chrono::Utc::now());
-            runtime.metadata = Some(ExecutionMetadata {
-                input_tokens: input.len() / 4, // Rough estimate
-                output_tokens: result.len() / 4,
-                execution_time_ms: execution_time,
-                tool_calls: 0,
-                model: Some(config.model.clone()),
-            });
+            runtime.error = Some(error_msg.to_string());
+            runtime.output.push(format!(
+                "[{}] Error: {}",
+                chrono::Utc::now().format("%H:%M:%S"),
+                error_msg
+            ));
         }
     }
 
-    // Emit completion event
-    let _ = window.emit("agent-completed", serde_json::json!({
-        "agent_id": agent_id,
-        "result": result,
-        "execution_time_ms": execution_time,
-    }));
+    // Emit error event
+    let _ = window.emit(
+        "agent-error",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "error": error_msg,
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        }),
+    );
 }
 
 /// Stop a running agent
@@ -227,21 +355,34 @@ pub async fn agent_stop(
     state: State<'_, AppState>,
     window: tauri::Window,
 ) -> Result<(), String> {
+    // Try to cancel the task in orchestrator
+    let _ = state.orchestrator.cancel_task(&agent_id).await;
+
+    // Update agent state
     let mut agents = state.agents.write().await;
 
     if let Some(runtime) = agents.get_mut(&agent_id) {
-        if runtime.status == AgentStatus::Running {
+        if runtime.status == AgentStatus::Running || runtime.status == AgentStatus::Pending {
             runtime.status = AgentStatus::Stopped;
             runtime.finished_at = Some(chrono::Utc::now());
-            runtime.output.push("Agent stopped by user".to_string());
+            runtime.output.push(format!(
+                "[{}] Agent stopped by user",
+                chrono::Utc::now().format("%H:%M:%S")
+            ));
 
-            let _ = window.emit("agent-stopped", serde_json::json!({
-                "agent_id": agent_id,
-            }));
+            let _ = window.emit(
+                "agent-stopped",
+                serde_json::json!({
+                    "agent_id": agent_id,
+                }),
+            );
 
             Ok(())
         } else {
-            Err(format!("Agent {} is not running", agent_id))
+            Err(format!(
+                "Agent {} is not running (status: {:?})",
+                agent_id, runtime.status
+            ))
         }
     } else {
         Err(format!("Agent {} not found", agent_id))
@@ -265,6 +406,7 @@ pub async fn agent_status(
             metadata: runtime.metadata.clone().map(|m| m.into()),
             started_at: runtime.started_at.map(|t| t.to_rfc3339()),
             finished_at: runtime.finished_at.map(|t| t.to_rfc3339()),
+            error: runtime.error.clone(),
         })
     } else {
         Err(format!("Agent {} not found", agent_id))
@@ -273,9 +415,7 @@ pub async fn agent_status(
 
 /// List all agents
 #[tauri::command]
-pub async fn agent_list(
-    state: State<'_, AppState>,
-) -> Result<Vec<AgentStatusResponse>, String> {
+pub async fn agent_list(state: State<'_, AppState>) -> Result<Vec<AgentStatusResponse>, String> {
     let agents = state.agents.read().await;
 
     let list: Vec<AgentStatusResponse> = agents
@@ -288,6 +428,7 @@ pub async fn agent_list(
             metadata: runtime.metadata.clone().map(|m| m.into()),
             started_at: runtime.started_at.map(|t| t.to_rfc3339()),
             finished_at: runtime.finished_at.map(|t| t.to_rfc3339()),
+            error: runtime.error.clone(),
         })
         .collect();
 
@@ -296,9 +437,7 @@ pub async fn agent_list(
 
 /// Clear completed agents from list
 #[tauri::command]
-pub async fn agent_clear_completed(
-    state: State<'_, AppState>,
-) -> Result<usize, String> {
+pub async fn agent_clear_completed(state: State<'_, AppState>) -> Result<usize, String> {
     let mut agents = state.agents.write().await;
     let initial_count = agents.len();
 
@@ -306,5 +445,26 @@ pub async fn agent_clear_completed(
         runtime.status == AgentStatus::Running || runtime.status == AgentStatus::Pending
     });
 
+    // Also cleanup finished tasks in orchestrator
+    state.orchestrator.cleanup_finished_tasks().await;
+
     Ok(initial_count - agents.len())
+}
+
+/// Get orchestrator statistics
+#[tauri::command]
+pub async fn agent_orchestrator_stats(
+    state: State<'_, AppState>,
+) -> Result<serde_json::Value, String> {
+    let stats = state.orchestrator.stats().await;
+
+    Ok(serde_json::json!({
+        "pending": stats.pending,
+        "running": stats.running,
+        "completed": stats.completed,
+        "failed": stats.failed,
+        "cancelled": stats.cancelled,
+        "max_concurrent": stats.max_concurrent,
+        "available_permits": stats.available_permits,
+    }))
 }

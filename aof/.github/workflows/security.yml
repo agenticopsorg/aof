@@ -1,0 +1,151 @@
+name: Security Audit
+
+on:
+  schedule:
+    # Run daily at 2 AM UTC
+    - cron: '0 2 * * *'
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Security audit"
+        continue-on-error: true
+
+      - name: Run security audit
+        run: cargo audit --deny warnings
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "security-audit"
+        continue-on-error: true
+
+  dependency-check:
+    name: Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Dependency check"
+        continue-on-error: true
+
+      - name: Run dependency check
+        run: cargo deny check
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "dependency-check"
+        continue-on-error: true
+
+  cargo-outdated:
+    name: Outdated Dependencies
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Install cargo-outdated
+        run: cargo install cargo-outdated --locked
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Check outdated dependencies"
+        continue-on-error: true
+
+      - name: Check for outdated dependencies
+        run: cargo outdated --workspace --exit-code 1
+        continue-on-error: true
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "cargo-outdated"
+        continue-on-error: true
+
+  supply-chain:
+    name: Supply Chain Security
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo registry
+        uses: actions/cache@v4
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-registry-
+
+      - name: Install cargo-supply-chain
+        run: cargo install cargo-supply-chain --locked
+
+      - name: Pre-task hook
+        run: npx claude-flow@alpha hooks pre-task --description "Supply chain analysis"
+        continue-on-error: true
+
+      - name: Analyze supply chain
+        run: cargo supply-chain publishers --json > supply-chain.json
+
+      - name: Upload supply chain report
+        uses: actions/upload-artifact@v4
+        with:
+          name: supply-chain-report
+          path: supply-chain.json
+          retention-days: 30
+
+      - name: Post-task hook
+        run: npx claude-flow@alpha hooks post-task --task-id "supply-chain"
+        continue-on-error: true

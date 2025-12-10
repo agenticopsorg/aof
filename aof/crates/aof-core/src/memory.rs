@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use crate::{AofError, AofResult};
+use crate::AofResult;
 
 /// Memory backend trait - pluggable persistence for agent state
 ///

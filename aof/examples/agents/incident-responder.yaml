@@ -1,0 +1,181 @@
+# Incident Response Automation Agent
+# Purpose: On-call automation for production incidents
+# Usage: Triggered by monitoring alerts (PagerDuty, Datadog, etc.)
+
+name: incident-responder
+description: Automated incident response for production systems
+
+# Model Configuration
+model:
+  provider: anthropic
+  name: claude-3-5-sonnet-20241022
+  temperature: 0.1  # Precise, deterministic responses for incidents
+  max_tokens: 8192
+
+# System Prompt - SRE expertise
+system_prompt: |
+  You are a senior SRE responding to production incidents. Your protocol:
+
+  **Incident Response Framework (OODA Loop):**
+
+  1. **OBSERVE** - Gather information
+     - Check monitoring dashboards
+     - Review recent deployments
+     - Analyze error logs
+     - Inspect system metrics
+
+  2. **ORIENT** - Understand the situation
+     - Classify severity (P0/P1/P2/P3)
+     - Identify affected services
+     - Estimate user impact
+     - Determine if escalation needed
+
+  3. **DECIDE** - Choose mitigation strategy
+     - Rollback recent changes?
+     - Scale resources?
+     - Failover to backup?
+     - Apply hotfix?
+
+  4. **ACT** - Execute response
+     - Run remediation commands
+     - Update incident status
+     - Communicate to stakeholders
+     - Document actions taken
+
+  **Severity Levels:**
+  - **P0** (Critical): Complete outage, >50% users affected
+    → Immediate escalation, all hands on deck
+  - **P1** (High): Major feature down, 10-50% users affected
+    → Escalate to on-call senior engineer
+  - **P2** (Medium): Minor feature degraded, <10% users
+    → Investigate and fix within 4 hours
+  - **P3** (Low): Cosmetic issue, no user impact
+    → Schedule for next sprint
+
+  **Communication:**
+  - Update status page every 15 minutes
+  - Post in #incidents Slack channel
+  - Notify customer success for P0/P1
+  - Create detailed postmortem after resolution
+
+  **Safety Rules:**
+  - NEVER run destructive commands without confirmation
+  - ALWAYS create backups before making changes
+  - NEVER share sensitive data in communications
+  - ALWAYS follow the runbook if available
+
+# MCP Tools - Multiple services for comprehensive response
+mcp_servers:
+  # Kubernetes for container management
+  - name: kubectl
+    command: npx
+    args:
+      - kubectl-mcp-server
+    env:
+      KUBECONFIG: ${KUBECONFIG}
+
+  # AWS for cloud infrastructure
+  - name: aws-cli
+    command: npx
+    args:
+      - aws-mcp-server
+    env:
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
+      AWS_REGION: ${AWS_REGION}
+
+  # Slack for notifications
+  - name: slack
+    command: npx
+    args:
+      - slack-mcp-server
+    env:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+
+# Triggers from monitoring tools
+triggers:
+  - type: webhook
+    path: /incident/alert
+    methods: [POST]
+    authentication:
+      type: bearer
+      token: ${INCIDENT_WEBHOOK_TOKEN}
+
+# Memory for incident context
+memory:
+  enabled: true
+  type: long_term
+  max_messages: 200
+  persistence: true
+  namespace: incidents
+
+# Automated Response Workflows
+workflows:
+  # High CPU usage
+  - name: high_cpu_mitigation
+    trigger:
+      alert: "HighCPUUsage"
+      threshold: ">80%"
+    actions:
+      - check_recent_deployments
+      - analyze_pod_metrics
+      - scale_if_needed
+      - notify_team
+
+  # Database connection errors
+  - name: db_connection_fix
+    trigger:
+      alert: "DatabaseConnectionError"
+    actions:
+      - check_db_status
+      - verify_connection_pool
+      - restart_stale_connections
+      - escalate_if_persists
+
+  # Out of memory
+  - name: oom_response
+    trigger:
+      alert: "OutOfMemory"
+    actions:
+      - identify_memory_leak
+      - increase_limits_temporarily
+      - create_heap_dump
+      - schedule_analysis
+
+# Safety Guardrails
+safety:
+  require_confirmation:
+    - delete_*
+    - drop_*
+    - terminate_*
+    - rollback_*
+
+  max_actions_per_incident: 10
+
+  blocked_actions:
+    - drop database
+    - delete all
+    - rm -rf /
+
+# Example Webhook Payload:
+# {
+#   "alert_name": "HighErrorRate",
+#   "severity": "P1",
+#   "service": "api-gateway",
+#   "metric": "error_rate",
+#   "current_value": "15.3%",
+#   "threshold": "5%",
+#   "started_at": "2025-12-10T04:30:00Z",
+#   "dashboard": "https://datadog.com/dashboard/xyz"
+# }
+#
+# Expected Output:
+# The agent will:
+# 1. Post to #incidents: "🚨 P1 Incident: api-gateway error rate 15.3% (threshold: 5%)"
+# 2. Run diagnostics: kubectl logs, AWS CloudWatch metrics
+# 3. Analyze: Check recent deployments, review error patterns
+# 4. Suggest mitigation: "Recommend rollback to version v1.2.3 (deployed 2h ago)"
+# 5. Execute (with confirmation): Rollback deployment
+# 6. Monitor: Track error rate decrease
+# 7. Update status: "✅ Incident resolved. Error rate back to 0.8%"
+# 8. Create postmortem template

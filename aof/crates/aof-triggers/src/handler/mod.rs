@@ -9,10 +9,10 @@ use std::sync::Arc;
 use tracing::{debug, error, info, warn};
 
 use crate::command::{CommandError, CommandType, TriggerCommand, TriggerTarget};
-use crate::platforms::{PlatformError, TriggerMessage, TriggerPlatform};
+use crate::platforms::{TriggerMessage, TriggerPlatform};
 use crate::response::{TriggerResponse, TriggerResponseBuilder};
-use aof_core::{AofError, AofResult};
-use aof_runtime::{RuntimeOrchestrator, Task};
+use aof_core::{AgentContext, AofError, AofResult};
+use aof_runtime::{RuntimeOrchestrator, Task, TaskStatus};
 
 /// Helper trait to convert CommandError to AofError
 trait CommandErrorExt<T> {
@@ -198,7 +198,12 @@ impl TriggerHandler {
 
                 // Create task
                 let task_id = format!("trigger-{}-{}", cmd.context.user_id, uuid::Uuid::new_v4());
-                let task = Task::new(task_id.clone(), agent_name.to_string(), agent_name.to_string(), input);
+                let task = Task::new(
+                    task_id.clone(),
+                    format!("{} (user: {})", agent_name, cmd.context.user_id),
+                    agent_name.to_string(),
+                    input.clone(),
+                );
 
                 // Submit to orchestrator
                 let handle = self.orchestrator.submit_task(task);
@@ -206,14 +211,75 @@ impl TriggerHandler {
                 // Track user task
                 self.increment_user_tasks(&cmd.context.user_id);
 
-                // Start execution (simplified - in real implementation would use actual agent executor)
+                // Execute task through runtime with AgentExecutor
                 let user_id = cmd.context.user_id.clone();
                 let user_tasks = Arc::clone(&self.user_tasks);
-                let handle_clone = Arc::clone(&handle);
+                let orchestrator = Arc::clone(&self.orchestrator);
+                let task_id_clone = task_id.clone();
+                let agent_name_clone = agent_name.to_string();
+                let platform = cmd.context.platform.clone();
+                let channel_id = cmd.context.channel_id.clone();
+                let platforms = self.platforms.clone();
 
                 tokio::spawn(async move {
-                    // Placeholder: would actually execute agent here
-                    tokio::time::sleep(tokio::time::Duration::from_secs(2)).await;
+                    // Execute task through orchestrator
+                    let result = orchestrator
+                        .execute_task(&task_id_clone, |task| async move {
+                            // Create AgentContext
+                            let _context = AgentContext::new(&task.input);
+
+                            // For now, return a placeholder response
+                            // TODO: Wire up actual AgentExecutor with Model and ToolExecutor
+                            Ok(format!(
+                                "Agent {} processed: {}\n\nNote: Full agent execution with LLM coming soon!",
+                                task.agent_name, task.input
+                            ))
+                        })
+                        .await;
+
+                    // Send completion notification to platform
+                    if let Some(platform_impl) = platforms.get(&platform) {
+                        let response = match result {
+                            Ok(_handle) => {
+                                // Wait for task completion
+                                tokio::time::sleep(tokio::time::Duration::from_millis(100)).await;
+
+                                if let Some(task_handle) = orchestrator.get_task(&task_id_clone) {
+                                    let status = task_handle.status().await;
+
+                                    match status {
+                                        TaskStatus::Completed => {
+                                            TriggerResponseBuilder::new()
+                                                .text(format!("✅ Task completed: `{}`", task_id_clone))
+                                                .success()
+                                                .build()
+                                        }
+                                        TaskStatus::Failed => {
+                                            TriggerResponseBuilder::new()
+                                                .text(format!("❌ Task failed: `{}`", task_id_clone))
+                                                .error()
+                                                .build()
+                                        }
+                                        _ => {
+                                            TriggerResponseBuilder::new()
+                                                .text(format!("ℹ️ Task status: {:?} - `{}`", status, task_id_clone))
+                                                .build()
+                                        }
+                                    }
+                                } else {
+                                    TriggerResponseBuilder::new()
+                                        .text("Task execution started but handle lost")
+                                        .build()
+                                }
+                            }
+                            Err(e) => TriggerResponseBuilder::new()
+                                .text(format!("Task execution error: {}", e))
+                                .error()
+                                .build(),
+                        };
+
+                        let _ = platform_impl.send_response(&channel_id, response).await;
+                    }
 
                     // Decrement user task count
                     if let Some(mut count) = user_tasks.get_mut(&user_id) {
@@ -225,8 +291,10 @@ impl TriggerHandler {
 
                 Ok(TriggerResponseBuilder::new()
                     .text(format!(
-                        "✓ Task started: `{}`\nAgent: {}\nUse `/status task {}` to check progress",
-                        task_id, agent_name, task_id
+                        "✓ Task started: `{}`\nAgent: {}\nInput: {}\nUse `/status task {}` to check progress",
+                        task_id, agent_name,
+                        if input.len() > 50 { format!("{}...", &input[..50]) } else { input },
+                        task_id
                     ))
                     .success()
                     .build())
@@ -255,15 +323,47 @@ impl TriggerHandler {
                     let task = handle.task().await;
                     let status = handle.status().await;
 
+                    // Build detailed status message
+                    let status_icon = match status {
+                        TaskStatus::Pending => "⏳",
+                        TaskStatus::Running => "▶️",
+                        TaskStatus::Completed => "✅",
+                        TaskStatus::Failed => "❌",
+                        TaskStatus::Cancelled => "🚫",
+                    };
+
+                    let mut text = format!(
+                        "{} **Task Status**\n\n**ID:** `{}`\n**Name:** {}\n**Agent:** {}\n**Status:** {:?}",
+                        status_icon, task.id, task.name, task.agent_name, status
+                    );
+
+                    // Add priority if set
+                    if task.priority > 0 {
+                        text.push_str(&format!("\n**Priority:** {}", task.priority));
+                    }
+
+                    // Add metadata if present
+                    if !task.metadata.is_empty() {
+                        text.push_str("\n\n**Metadata:**");
+                        for (key, value) in &task.metadata {
+                            text.push_str(&format!("\n• {}: {}", key, value));
+                        }
+                    }
+
+                    // Add input preview
+                    let input_preview = if task.input.len() > 100 {
+                        format!("{}...", &task.input[..100])
+                    } else {
+                        task.input.clone()
+                    };
+                    text.push_str(&format!("\n\n**Input:** {}", input_preview));
+
                     Ok(TriggerResponseBuilder::new()
-                        .text(format!(
-                            "Task: {}\nStatus: {:?}\nAgent: {}",
-                            task.id, status, task.agent_name
-                        ))
+                        .text(text)
                         .build())
                 } else {
                     Ok(TriggerResponseBuilder::new()
-                        .text(format!("Task not found: {}", task_id))
+                        .text(format!("❌ Task not found: `{}`", task_id))
                         .error()
                         .build())
                 }
@@ -306,14 +406,44 @@ impl TriggerHandler {
                 let task_ids = self.orchestrator.list_tasks();
                 let stats = self.orchestrator.stats().await;
 
-                let text = format!(
-                    "Tasks:\n• Pending: {}\n• Running: {}\n• Completed: {}\n• Failed: {}\n\nTask IDs:\n{}",
+                let mut text = format!(
+                    "📋 **Task Overview**\n\n**Statistics:**\n⏳ Pending: {}\n▶️ Running: {}\n✅ Completed: {}\n❌ Failed: {}\n🚫 Cancelled: {}\n\n**Capacity:**\n• Max Concurrent: {}\n• Available Slots: {}",
                     stats.pending,
                     stats.running,
                     stats.completed,
                     stats.failed,
-                    task_ids.join("\n")
+                    stats.cancelled,
+                    stats.max_concurrent,
+                    stats.available_permits
                 );
+
+                if !task_ids.is_empty() {
+                    text.push_str(&format!("\n\n**Active Tasks ({}):**", task_ids.len()));
+
+                    // Show first 10 tasks with status
+                    let display_limit = 10;
+                    for (i, task_id) in task_ids.iter().take(display_limit).enumerate() {
+                        if let Some(handle) = self.orchestrator.get_task(task_id) {
+                            let status = handle.status().await;
+                            let icon = match status {
+                                TaskStatus::Pending => "⏳",
+                                TaskStatus::Running => "▶️",
+                                TaskStatus::Completed => "✅",
+                                TaskStatus::Failed => "❌",
+                                TaskStatus::Cancelled => "🚫",
+                            };
+                            text.push_str(&format!("\n{}. {} `{}`", i + 1, icon, task_id));
+                        } else {
+                            text.push_str(&format!("\n{}. `{}`", i + 1, task_id));
+                        }
+                    }
+
+                    if task_ids.len() > display_limit {
+                        text.push_str(&format!("\n\n...and {} more tasks", task_ids.len() - display_limit));
+                    }
+                } else {
+                    text.push_str("\n\n_No active tasks_");
+                }
 
                 Ok(TriggerResponseBuilder::new().text(text).build())
             }
@@ -415,6 +545,56 @@ impl TriggerHandler {
             .entry(user_id.to_string())
             .and_modify(|count| *count += 1)
             .or_insert(1);
+    }
+
+    /// Format error for specific platform
+    ///
+    /// Provides platform-specific error formatting to enhance user experience
+    fn format_error_for_platform(&self, platform: &str, error: &AofError) -> String {
+        // Base error message
+        let base_msg = match error {
+            AofError::Agent(msg) => format!("Agent Error: {}", msg),
+            AofError::Model(msg) => format!("Model Error: {}", msg),
+            AofError::Tool(msg) => format!("Tool Error: {}", msg),
+            AofError::Config(msg) => format!("Configuration Error: {}", msg),
+            AofError::Timeout(msg) => format!("Timeout: {}", msg),
+            AofError::InvalidState(msg) => format!("Invalid State: {}", msg),
+            _ => format!("Error: {}", error),
+        };
+
+        // Platform-specific formatting
+        match platform.to_lowercase().as_str() {
+            "slack" => {
+                // Slack uses markdown-style formatting
+                format!("❌ *Error*\n```{}```", base_msg)
+            }
+            "discord" => {
+                // Discord uses markdown with code blocks
+                format!("❌ **Error**\n```\n{}\n```", base_msg)
+            }
+            "telegram" => {
+                // Telegram supports markdown
+                format!("❌ *Error*\n`{}`", base_msg)
+            }
+            "whatsapp" => {
+                // WhatsApp has limited formatting
+                format!("❌ Error: {}", base_msg)
+            }
+            _ => {
+                // Generic formatting
+                format!("❌ {}", base_msg)
+            }
+        }
+    }
+
+    /// Format success message for specific platform
+    fn format_success_for_platform(&self, platform: &str, message: &str) -> String {
+        match platform.to_lowercase().as_str() {
+            "slack" => format!("✅ *Success*\n{}", message),
+            "discord" => format!("✅ **Success**\n{}", message),
+            "telegram" => format!("✅ *Success*\n{}", message),
+            _ => format!("✅ {}", message),
+        }
     }
 }
 

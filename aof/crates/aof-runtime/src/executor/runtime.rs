@@ -3,7 +3,7 @@
 //! The Runtime loads agent configurations, creates models, tools, and memory,
 //! and executes agents with proper lifecycle management.
 
-use super::AgentExecutor;
+use super::{AgentExecutor, agent_executor::StreamEvent};
 use aof_core::{
     AgentConfig, AgentContext, AofError, AofResult, ModelConfig, ModelProvider, Tool,
     ToolDefinition, ToolExecutor, ToolInput,
@@ -14,7 +14,8 @@ use aof_memory::{InMemoryBackend, SimpleMemory};
 use async_trait::async_trait;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tracing::{debug, error, info, warn};
+use tokio::sync::mpsc;
+use tracing::{debug, info};
 
 /// Top-level runtime for agent execution
 ///
@@ -132,6 +133,139 @@ impl Runtime {
             .ok_or_else(|| AofError::agent(format!("Agent not found: {}", agent_name)))?;
 
         executor.execute(context).await
+    }
+
+    /// Execute an agent with streaming support for real-time updates
+    ///
+    /// # Arguments
+    /// * `agent_name` - Name of the loaded agent
+    /// * `input` - User input/query
+    /// * `stream_tx` - Channel sender for streaming events
+    ///
+    /// # Returns
+    /// The agent's final response
+    ///
+    /// # Example
+    /// ```no_run
+    /// use tokio::sync::mpsc;
+    /// # use aof_runtime::Runtime;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut runtime = Runtime::new();
+    /// runtime.load_agent_from_file("config.yaml").await?;
+    ///
+    /// let (tx, mut rx) = mpsc::channel(100);
+    ///
+    /// // Spawn task to handle stream events
+    /// tokio::spawn(async move {
+    ///     while let Some(event) = rx.recv().await {
+    ///         println!("Event: {:?}", event);
+    ///     }
+    /// });
+    ///
+    /// let result = runtime.execute_streaming("my-agent", "Hello", tx).await?;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn execute_streaming(
+        &self,
+        agent_name: &str,
+        input: &str,
+        stream_tx: mpsc::Sender<StreamEvent>,
+    ) -> AofResult<String> {
+        let executor = self
+            .agents
+            .get(agent_name)
+            .ok_or_else(|| AofError::agent(format!("Agent not found: {}", agent_name)))?;
+
+        let mut context = AgentContext::new(input);
+        executor.execute_streaming(&mut context, stream_tx).await
+    }
+
+    /// Execute an agent with streaming and a pre-built context
+    ///
+    /// # Arguments
+    /// * `agent_name` - Name of the loaded agent
+    /// * `context` - Pre-configured agent context
+    /// * `stream_tx` - Channel sender for streaming events
+    ///
+    /// # Returns
+    /// The agent's final response
+    pub async fn execute_streaming_with_context(
+        &self,
+        agent_name: &str,
+        context: &mut AgentContext,
+        stream_tx: mpsc::Sender<StreamEvent>,
+    ) -> AofResult<String> {
+        let executor = self
+            .agents
+            .get(agent_name)
+            .ok_or_else(|| AofError::agent(format!("Agent not found: {}", agent_name)))?;
+
+        executor.execute_streaming(context, stream_tx).await
+    }
+
+    /// Execute an agent with streaming and cancellation support
+    ///
+    /// # Arguments
+    /// * `agent_name` - Name of the loaded agent
+    /// * `input` - User input/query
+    /// * `stream_tx` - Channel sender for streaming events
+    /// * `cancel_rx` - Channel receiver for cancellation signal
+    ///
+    /// # Returns
+    /// The agent's final response or cancellation error
+    ///
+    /// # Example
+    /// ```no_run
+    /// use tokio::sync::{mpsc, oneshot};
+    /// # use aof_runtime::Runtime;
+    /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {
+    /// let mut runtime = Runtime::new();
+    /// runtime.load_agent_from_file("config.yaml").await?;
+    ///
+    /// let (stream_tx, mut stream_rx) = mpsc::channel(100);
+    /// let (cancel_tx, cancel_rx) = oneshot::channel();
+    ///
+    /// // Spawn task to handle cancellation
+    /// tokio::spawn(async move {
+    ///     tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
+    ///     let _ = cancel_tx.send(());
+    /// });
+    ///
+    /// let result = runtime.execute_streaming_cancellable(
+    ///     "my-agent",
+    ///     "Long running task",
+    ///     stream_tx,
+    ///     cancel_rx
+    /// ).await;
+    /// # Ok(())
+    /// # }
+    /// ```
+    pub async fn execute_streaming_cancellable(
+        &self,
+        agent_name: &str,
+        input: &str,
+        stream_tx: mpsc::Sender<StreamEvent>,
+        mut cancel_rx: tokio::sync::oneshot::Receiver<()>,
+    ) -> AofResult<String> {
+        let executor = self
+            .agents
+            .get(agent_name)
+            .ok_or_else(|| AofError::agent(format!("Agent not found: {}", agent_name)))?;
+
+        let mut context = AgentContext::new(input);
+
+        tokio::select! {
+            result = executor.execute_streaming(&mut context, stream_tx.clone()) => {
+                result
+            }
+            _ = &mut cancel_rx => {
+                let _ = stream_tx.send(StreamEvent::Error {
+                    message: "Execution cancelled by user".to_string(),
+                }).await;
+                Err(AofError::agent("Execution cancelled".to_string()))
+            }
+        }
     }
 
     /// List all loaded agents

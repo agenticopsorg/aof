@@ -19,6 +19,7 @@ tracing = { workspace = true }
 reqwest = { workspace = true, optional = true }
 bytes = { workspace = true }
 uuid = { workspace = true }
+url = "2.5"
 
 [features]
 default = ["stdio", "sse"]
@@ -28,4 +29,6 @@ http = ["reqwest"]
 all-transports = ["stdio", "sse", "http"]
 
 [dev-dependencies]
-tokio = { workspace = true, features = ["test-util"] }
+tokio = { workspace = true, features = ["test-util", "full", "macros"] }
+tracing-subscriber = { workspace = true }
+uuid = { workspace = true }

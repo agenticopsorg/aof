@@ -1,0 +1,164 @@
+# Slack Customer Support Agent
+# Purpose: Fast, intelligent customer support with interactive buttons
+# Usage: Triggered automatically from Slack messages
+
+name: slack-support-bot
+description: AI-powered customer support agent for Slack workspaces
+
+# Model Configuration - Fast responses prioritized
+model:
+  provider: anthropic
+  name: claude-3-haiku-20240307  # Fast, cost-effective
+  temperature: 0.7  # Friendly, conversational
+  max_tokens: 2048
+
+# System Prompt - Customer service expertise
+system_prompt: |
+  You are a friendly, professional customer support specialist. Your mission:
+
+  **Support Principles:**
+  😊 Be empathetic and patient
+  🎯 Understand the real problem before suggesting solutions
+  📚 Use knowledge base to provide accurate answers
+  ⚡ Respond quickly and clearly
+  🔄 Follow up until issue is resolved
+
+  **Response Structure:**
+  1. Acknowledge the customer's concern
+  2. Ask clarifying questions if needed
+  3. Provide step-by-step solutions
+  4. Offer additional help
+
+  **Escalation Criteria:**
+  - Billing/payment issues → Escalate to finance team
+  - Technical bugs → Create ticket for engineering
+  - Account security → Escalate to security team
+  - Feature requests → Log for product team
+
+  **Tone:**
+  - Professional but warm
+  - Use emojis sparingly for friendliness
+  - Avoid jargon unless customer uses it first
+  - Never say "I don't know" - always offer to find out
+
+  Use Slack markdown formatting (bold with *, code with `).
+
+# MCP Tools
+mcp_servers:
+  - name: slack
+    command: npx
+    args:
+      - slack-mcp-server
+    env:
+      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+      SLACK_APP_TOKEN: ${SLACK_APP_TOKEN}
+
+# Slack Integration
+triggers:
+  - type: slack
+    events:
+      - message.im  # Direct messages
+      - app_mention  # @mentions in channels
+    channels:
+      - support
+      - help
+      - general
+
+# Interactive Components
+interactive:
+  enabled: true
+  components:
+    # Quick action buttons
+    - type: buttons
+      actions:
+        - id: escalate_to_human
+          label: "Talk to Human Agent"
+          style: danger
+        - id: mark_resolved
+          label: "Issue Resolved ✓"
+          style: primary
+        - id: request_callback
+          label: "Request Callback"
+          style: default
+
+    # Category selection
+    - type: select
+      id: issue_category
+      placeholder: "Select issue type..."
+      options:
+        - label: "Technical Issue"
+          value: tech
+        - label: "Billing Question"
+          value: billing
+        - label: "Feature Request"
+          value: feature
+        - label: "Account Access"
+          value: account
+        - label: "General Question"
+          value: general
+
+# Memory Configuration
+memory:
+  enabled: true
+  type: short_term
+  max_messages: 30
+  context_window: 12h  # Remember conversations for 12 hours
+
+# Response Templates
+templates:
+  greeting: |
+    Hi there! 👋 I'm your AI support assistant. How can I help you today?
+
+    Common issues I can help with:
+    • Technical problems
+    • Account questions
+    • Product features
+    • General inquiries
+
+  escalation: |
+    I've created a ticket for our specialized team. They'll reach out within 2 hours.
+
+    Ticket #: {{ticket_id}}
+    Priority: {{priority}}
+
+    Is there anything else I can help with?
+
+  resolution: |
+    Great! I'm glad we could resolve that. 🎉
+
+    If you need anything else, just send me a message anytime!
+
+# Auto-responses
+auto_responses:
+  # After hours
+  - trigger: time_range
+    range: "18:00-09:00"
+    message: |
+      Thanks for your message! Our team is currently offline.
+
+      • For urgent issues: Call +1-555-0100
+      • Otherwise: I'll assist you now, or our team will follow up by 9 AM
+
+  # High volume
+  - trigger: queue_size
+    threshold: 10
+    message: |
+      We're experiencing higher than usual volume. Current wait time: ~5 minutes.
+
+      For faster help, check our FAQ: https://help.example.com
+
+# Example Usage:
+#
+# User in Slack: "@support-bot My dashboard isn't loading"
+#
+# Expected Output:
+# Bot: "I understand the dashboard isn't loading for you. Let me help!
+#
+#       Quick checks:
+#       1. Try refreshing the page (Ctrl+R / Cmd+R)
+#       2. Clear your browser cache
+#       3. Try a different browser
+#
+#       Which browser are you using?"
+#
+# [Buttons appear: Chrome | Firefox | Safari | Other]
