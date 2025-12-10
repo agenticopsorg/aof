@@ -231,12 +231,97 @@ async fn execute_agent_with_runtime(
         }
     };
 
+    // Create tool executor if tools are specified in config
+    let tool_executor: Option<std::sync::Arc<dyn aof_core::ToolExecutor>> = if !config.tools.is_empty() {
+        // Create MCP-based tool executor
+        use aof_mcp::McpClientBuilder;
+        use aof_core::{ToolDefinition, ToolInput, Tool};
+        use async_trait::async_trait;
+
+        match McpClientBuilder::new()
+            .stdio(
+                "npx",
+                vec!["-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
+            )
+            .build()
+        {
+            Ok(mcp_client) => {
+                // Create a simple MCP tool executor
+                struct McpToolExecutor {
+                    client: std::sync::Arc<aof_mcp::McpClient>,
+                    tool_names: Vec<String>,
+                }
+
+                #[async_trait]
+                impl aof_core::ToolExecutor for McpToolExecutor {
+                    async fn execute_tool(
+                        &self,
+                        name: &str,
+                        input: ToolInput,
+                    ) -> aof_core::AofResult<aof_core::ToolResult> {
+                        let start = std::time::Instant::now();
+                        let result = self
+                            .client
+                            .call_tool(name, input.arguments)
+                            .await
+                            .map_err(|e| aof_core::AofError::tool(format!("MCP tool call failed: {}", e)))?;
+
+                        let execution_time_ms = start.elapsed().as_millis() as u64;
+
+                        Ok(aof_core::ToolResult {
+                            success: true,
+                            data: result,
+                            error: None,
+                            execution_time_ms,
+                        })
+                    }
+
+                    fn list_tools(&self) -> Vec<ToolDefinition> {
+                        self.tool_names
+                            .iter()
+                            .map(|name| ToolDefinition {
+                                name: name.clone(),
+                                description: format!("MCP tool: {}", name),
+                                parameters: serde_json::json!({
+                                    "type": "object",
+                                    "properties": {},
+                                }),
+                            })
+                            .collect()
+                    }
+
+                    fn get_tool(&self, _name: &str) -> Option<std::sync::Arc<dyn Tool>> {
+                        None
+                    }
+                }
+
+                Some(std::sync::Arc::new(McpToolExecutor {
+                    client: std::sync::Arc::new(mcp_client),
+                    tool_names: config.tools.clone(),
+                }))
+            }
+            Err(e) => {
+                eprintln!("Warning: Failed to create MCP client for tools: {}", e);
+                None
+            }
+        }
+    } else {
+        None
+    };
+
+    // Create memory backend
+    let memory = {
+        use aof_memory::{InMemoryBackend, SimpleMemory};
+        let backend = InMemoryBackend::new();
+        Some(std::sync::Arc::new(SimpleMemory::new(std::sync::Arc::new(backend))))
+    };
+
     // Create agent executor
     let executor = AgentExecutor::new(
         config.clone(),
         model,
-        None, // TODO: Add tool executor support
-        None, // TODO: Add memory support
+        tool_executor,
+        memory,
     );
 
     // Create agent context

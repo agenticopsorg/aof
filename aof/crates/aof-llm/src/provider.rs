@@ -20,7 +20,7 @@ impl ProviderFactory {
             ModelProvider::Anthropic => anthropic::AnthropicProvider::create(config),
             ModelProvider::OpenAI => openai::OpenAIProvider::create(config),
             #[cfg(feature = "bedrock")]
-            ModelProvider::Bedrock => bedrock::BedrockProvider::create(config),
+            ModelProvider::Bedrock => bedrock::BedrockProvider::create(config).await,
             #[cfg(not(feature = "bedrock"))]
             ModelProvider::Bedrock => Err(AofError::config("Bedrock provider not enabled - requires 'bedrock' feature")),
             ModelProvider::Ollama => Err(AofError::config("Ollama provider not enabled - requires 'ollama' feature")),

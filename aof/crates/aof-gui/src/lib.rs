@@ -59,6 +59,14 @@ pub fn run() {
             commands::mcp_list_tools,
             commands::mcp_call_tool,
             commands::mcp_get_tool,
+            // Settings commands
+            commands::settings_get,
+            commands::settings_update,
+            commands::settings_reset,
+            commands::settings_export,
+            commands::settings_import,
+            commands::provider_test_connection,
+            commands::provider_list_models,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
