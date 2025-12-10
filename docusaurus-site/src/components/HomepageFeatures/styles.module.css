@@ -6,8 +6,13 @@
 }
 
 .featureIcon {
-  font-size: 3rem;
   margin-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+}
+
+.featureSvg {
+  color: var(--ifm-color-primary);
 }
 
 .features .row {

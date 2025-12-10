@@ -1,18 +1,19 @@
 import type {ReactNode} from 'react';
 import clsx from 'clsx';
 import Heading from '@theme/Heading';
+import { Rocket, Wrench, Bot, Shield, Database, Zap } from 'lucide-react';
 import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
   description: ReactNode;
-  icon: string;
+  Icon: React.ComponentType<{ size?: number; className?: string }>;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    title: '🚀 Quick to Deploy',
-    icon: '🚀',
+    title: 'Quick to Deploy',
+    Icon: Rocket,
     description: (
       <>
         Install with a single command and deploy your first AI agent in minutes.
@@ -21,8 +22,8 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: '🔧 Flexible Tools',
-    icon: '🔧',
+    title: 'Flexible Tools',
+    Icon: Wrench,
     description: (
       <>
         Integrate with kubectl, shell commands, HTTP APIs, Slack, GitHub,
@@ -32,8 +33,8 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: '🤖 Multi-Provider AI',
-    icon: '🤖',
+    title: 'Multi-Provider AI',
+    Icon: Bot,
     description: (
       <>
         Use OpenAI, Anthropic, Ollama, or Groq models. Switch providers easily
@@ -42,8 +43,8 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: '🔒 Safe & Controlled',
-    icon: '🔒',
+    title: 'Safe & Controlled',
+    Icon: Shield,
     description: (
       <>
         Human-in-the-loop approvals, allowed command lists, and audit logging
@@ -52,8 +53,8 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: '📊 Memory & Context',
-    icon: '📊',
+    title: 'Memory & Context',
+    Icon: Database,
     description: (
       <>
         Persistent memory, RAG integration, and conversation history help agents
@@ -62,8 +63,8 @@ const FeatureList: FeatureItem[] = [
     ),
   },
   {
-    title: '⚡ Production Ready',
-    icon: '⚡',
+    title: 'Production Ready',
+    Icon: Zap,
     description: (
       <>
         Built with Rust for performance and reliability. Supports fleets, workflows,
@@ -73,11 +74,13 @@ const FeatureList: FeatureItem[] = [
   },
 ];
 
-function Feature({title, description, icon}: FeatureItem) {
+function Feature({title, description, Icon}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
       <div className="text--center padding-horiz--md">
-        <div className={styles.featureIcon}>{icon}</div>
+        <div className={styles.featureIcon}>
+          <Icon size={48} className={styles.featureSvg} />
+        </div>
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
       </div>
