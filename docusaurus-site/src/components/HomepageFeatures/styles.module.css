@@ -5,7 +5,11 @@
   width: 100%;
 }
 
-.featureSvg {
-  height: 200px;
-  width: 200px;
+.featureIcon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.features .row {
+  row-gap: 2rem;
 }

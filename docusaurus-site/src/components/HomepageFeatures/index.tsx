@@ -5,50 +5,79 @@ import styles from './styles.module.css';
 
 type FeatureItem = {
   title: string;
-  Svg: React.ComponentType<React.ComponentProps<'svg'>>;
   description: ReactNode;
+  icon: string;
 };
 
 const FeatureList: FeatureItem[] = [
   {
-    title: 'Easy to Use',
-    Svg: require('@site/static/img/undraw_docusaurus_mountain.svg').default,
+    title: '🚀 Quick to Deploy',
+    icon: '🚀',
     description: (
       <>
-        Docusaurus was designed from the ground up to be easily installed and
-        used to get your website up and running quickly.
+        Install with a single command and deploy your first AI agent in minutes.
+        YAML-based configuration makes it easy to version control and share.
       </>
     ),
   },
   {
-    title: 'Focus on What Matters',
-    Svg: require('@site/static/img/undraw_docusaurus_tree.svg').default,
+    title: '🔧 Flexible Tools',
+    icon: '🔧',
     description: (
       <>
-        Docusaurus lets you focus on your docs, and we&apos;ll do the chores. Go
-        ahead and move your docs into the <code>docs</code> directory.
+        Integrate with kubectl, shell commands, HTTP APIs, Slack, GitHub,
+        PagerDuty, and custom MCP tools. Build agents that work with your
+        existing infrastructure.
       </>
     ),
   },
   {
-    title: 'Powered by React',
-    Svg: require('@site/static/img/undraw_docusaurus_react.svg').default,
+    title: '🤖 Multi-Provider AI',
+    icon: '🤖',
     description: (
       <>
-        Extend or customize your website layout by reusing React. Docusaurus can
-        be extended while reusing the same header and footer.
+        Use OpenAI, Anthropic, Ollama, or Groq models. Switch providers easily
+        and run locally or in the cloud.
+      </>
+    ),
+  },
+  {
+    title: '🔒 Safe & Controlled',
+    icon: '🔒',
+    description: (
+      <>
+        Human-in-the-loop approvals, allowed command lists, and audit logging
+        keep your infrastructure safe while enabling automation.
+      </>
+    ),
+  },
+  {
+    title: '📊 Memory & Context',
+    icon: '📊',
+    description: (
+      <>
+        Persistent memory, RAG integration, and conversation history help agents
+        learn and maintain context across interactions.
+      </>
+    ),
+  },
+  {
+    title: '⚡ Production Ready',
+    icon: '⚡',
+    description: (
+      <>
+        Built with Rust for performance and reliability. Supports fleets, workflows,
+        scheduling, webhooks, and complex orchestration patterns.
       </>
     ),
   },
 ];
 
-function Feature({title, Svg, description}: FeatureItem) {
+function Feature({title, description, icon}: FeatureItem) {
   return (
     <div className={clsx('col col--4')}>
-      <div className="text--center">
-        <Svg className={styles.featureSvg} role="img" />
-      </div>
       <div className="text--center padding-horiz--md">
+        <div className={styles.featureIcon}>{icon}</div>
         <Heading as="h3">{title}</Heading>
         <p>{description}</p>
       </div>
