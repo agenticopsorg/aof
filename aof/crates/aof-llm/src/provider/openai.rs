@@ -512,6 +512,7 @@ struct OpenAIStreamToolCall {
     #[serde(default)]
     id: Option<String>,
     #[serde(default)]
+    #[allow(dead_code)]
     r#type: Option<String>,
     #[serde(default)]
     function: Option<OpenAIStreamFunction>,

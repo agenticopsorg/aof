@@ -226,14 +226,64 @@ impl TriggerHandler {
                     let result = orchestrator
                         .execute_task(&task_id_clone, |task| async move {
                             // Create AgentContext
-                            let _context = AgentContext::new(&task.input);
+                            let mut context = AgentContext::new(&task.input);
 
-                            // For now, return a placeholder response
-                            // TODO: Wire up actual AgentExecutor with Model and ToolExecutor
-                            Ok(format!(
-                                "Agent {} processed: {}\n\nNote: Full agent execution with LLM coming soon!",
-                                task.agent_name, task.input
-                            ))
+                            // Create a minimal agent configuration for the task
+                            use aof_core::{AgentConfig, ModelConfig, ModelProvider};
+                            use aof_llm::ProviderFactory;
+                            use aof_runtime::AgentExecutor;
+                            use aof_memory::{InMemoryBackend, SimpleMemory};
+                            use std::collections::HashMap;
+
+                            let config = AgentConfig {
+                                name: task.agent_name.clone(),
+                                system_prompt: Some("You are a helpful AI assistant.".to_string()),
+                                model: "claude-3-5-sonnet-20241022".to_string(),
+                                tools: vec![],
+                                memory: None,
+                                max_iterations: 10,
+                                temperature: 0.7,
+                                max_tokens: Some(4096),
+                                extra: HashMap::new(),
+                            };
+
+                            // Create model
+                            let model_config = ModelConfig {
+                                model: "claude-3-5-sonnet-20241022".to_string(),
+                                provider: ModelProvider::Anthropic,
+                                api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
+                                endpoint: None,
+                                temperature: 0.7,
+                                max_tokens: Some(4096),
+                                timeout_secs: 60,
+                                headers: HashMap::new(),
+                                extra: HashMap::new(),
+                            };
+
+                            let model = match ProviderFactory::create(model_config).await {
+                                Ok(m) => m,
+                                Err(e) => {
+                                    return Ok(format!("Failed to create model: {}", e));
+                                }
+                            };
+
+                            // Create memory backend
+                            let memory_backend = InMemoryBackend::new();
+                            let memory = std::sync::Arc::new(SimpleMemory::new(std::sync::Arc::new(memory_backend)));
+
+                            // Create AgentExecutor with model and memory, but no tool executor for now
+                            let executor = AgentExecutor::new(
+                                config,
+                                model,
+                                None, // No tool executor for trigger-based agents
+                                Some(memory),
+                            );
+
+                            // Execute the agent
+                            match executor.execute(&mut context).await {
+                                Ok(response) => Ok(response),
+                                Err(e) => Ok(format!("Agent execution failed: {}", e)),
+                            }
                         })
                         .await;
 

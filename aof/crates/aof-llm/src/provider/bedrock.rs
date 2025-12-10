@@ -89,7 +89,7 @@ pub struct BedrockProvider {
 
 impl BedrockProvider {
     #[cfg(feature = "bedrock")]
-    pub fn create(config: ModelConfig) -> AofResult<Box<dyn Model>> {
+    pub async fn create(config: ModelConfig) -> AofResult<Box<dyn Model>> {
         let region = config
             .extra
             .get("region")
@@ -99,14 +99,10 @@ impl BedrockProvider {
             .unwrap_or_else(|| "us-east-1".to_string());
 
         // Initialize AWS SDK
-        let rt = tokio::runtime::Handle::current();
-        let sdk_config = rt.block_on(async {
-            let config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
-                .region(aws_config::Region::new(region.clone()));
+        let config_loader = aws_config::defaults(aws_config::BehaviorVersion::latest())
+            .region(aws_config::Region::new(region.clone()));
 
-            config_loader.load().await
-        });
-
+        let sdk_config = config_loader.load().await;
         let client = Client::new(&sdk_config);
 
         Ok(Box::new(Self {
@@ -117,7 +113,7 @@ impl BedrockProvider {
     }
 
     #[cfg(not(feature = "bedrock"))]
-    pub fn create(_config: ModelConfig) -> AofResult<Box<dyn Model>> {
+    pub async fn create(_config: ModelConfig) -> AofResult<Box<dyn Model>> {
         Err(AofError::config(
             "Bedrock provider not enabled. Enable the 'bedrock' feature",
         ))
@@ -171,10 +167,10 @@ impl BedrockProvider {
             tool_specs.push(BedrockTool::ToolSpec(spec));
         }
 
-        Ok(ToolConfiguration::builder()
+        ToolConfiguration::builder()
             .set_tools(Some(tool_specs))
             .build()
-            .map_err(|e| AofError::model(format!("Failed to build tool config: {}", e)))?)
+            .map_err(|e| AofError::model(format!("Failed to build tool config: {}", e)))
     }
 
     #[cfg(feature = "bedrock")]
@@ -210,14 +206,14 @@ impl BedrockProvider {
                             // Convert Document to JSON Value
                             let input: serde_json::Value = tool_use.input()
                                 .as_object()
-                                .and_then(|obj| {
+                                .map(|obj| {
                                     let mut map = serde_json::Map::new();
                                     for (k, v) in obj {
                                         if let Ok(json_val) = document_to_json(v) {
                                             map.insert(k.clone(), json_val);
                                         }
                                     }
-                                    Some(serde_json::Value::Object(map))
+                                    serde_json::Value::Object(map)
                                 })
                                 .unwrap_or(json!({}));
 
@@ -469,7 +465,7 @@ mod tests {
 
         // Note: This will fail without AWS credentials configured
         // Just testing the creation logic, not actual API calls
-        let result = BedrockProvider::create(config);
+        let result = BedrockProvider::create(config).await;
         assert!(result.is_ok());
     }
 
@@ -490,7 +486,7 @@ mod tests {
             extra,
         };
 
-        let provider = BedrockProvider::create(config).unwrap();
+        let provider = BedrockProvider::create(config).await.unwrap();
         let tokens = provider.count_tokens("Hello, world!");
         assert!(tokens > 0);
     }

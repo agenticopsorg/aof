@@ -129,7 +129,7 @@ impl AnthropicModel {
     }
 
     /// Convert Anthropic response to AOF format
-    fn from_anthropic_response(&self, response: AnthropicResponse) -> ModelResponse {
+    fn convert_anthropic_response(&self, response: AnthropicResponse) -> ModelResponse {
         let mut content = String::new();
         let mut tool_calls = Vec::new();
 
@@ -199,26 +199,20 @@ impl AnthropicModel {
         };
 
         match event {
-            AnthropicStreamEvent::ContentBlockStart { content_block, .. } => {
-                match content_block {
-                    AnthropicContentBlock::ToolUse { id, name, input } => {
-                        Some(Ok(StreamChunk::ToolCall {
-                            tool_call: ToolCall {
-                                id,
-                                name,
-                                arguments: input,
-                            },
-                        }))
-                    }
-                    _ => None,
-                }
+            AnthropicStreamEvent::ContentBlockStart { content_block: AnthropicContentBlock::ToolUse { id, name, input }, .. } => {
+                Some(Ok(StreamChunk::ToolCall {
+                    tool_call: ToolCall {
+                        id,
+                        name,
+                        arguments: input,
+                    },
+                }))
             }
-            AnthropicStreamEvent::ContentBlockDelta { delta, .. } => match delta {
-                AnthropicDelta::TextDelta { text } => {
-                    Some(Ok(StreamChunk::ContentDelta { delta: text }))
-                }
-                _ => None,
-            },
+            AnthropicStreamEvent::ContentBlockDelta { delta: AnthropicDelta::TextDelta { text }, .. } => {
+                Some(Ok(StreamChunk::ContentDelta { delta: text }))
+            }
+            AnthropicStreamEvent::ContentBlockStart { .. } => None,
+            AnthropicStreamEvent::ContentBlockDelta { .. } => None,
             AnthropicStreamEvent::MessageDelta {
                 delta,
                 usage: stream_usage,
@@ -279,7 +273,7 @@ impl Model for AnthropicModel {
             .await
             .map_err(|e| AofError::model(format!("Failed to parse response: {}", e)))?;
 
-        Ok(self.from_anthropic_response(api_response))
+        Ok(self.convert_anthropic_response(api_response))
     }
 
     async fn generate_stream(
@@ -485,6 +479,7 @@ struct AnthropicStreamMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 enum AnthropicDelta {
     TextDelta { text: String },
+    #[allow(dead_code)]
     InputJsonDelta { partial_json: String },
 }
 
