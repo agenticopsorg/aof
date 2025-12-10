@@ -2,10 +2,15 @@ import { useState, useEffect, useCallback } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import {
-  Terminal, Cpu, Network, Settings, Play, Square,
+  Terminal, Cpu, Network, Settings as SettingsIcon, Play, Square,
   FileCode, Check, AlertCircle, Loader2, Trash2,
   Plus, RefreshCw
 } from 'lucide-react';
+import { Toaster } from 'sonner';
+import { Settings } from './components/Settings';
+import { StreamingOutput } from './components/StreamingOutput';
+import { AgentTemplates } from './components/AgentTemplates';
+import { toast, invokeWithToast } from './lib/toast';
 import './App.css';
 
 // Types
@@ -47,7 +52,7 @@ interface ValidationResult {
 }
 
 // Tab type
-type TabType = 'agents' | 'config' | 'mcp';
+type TabType = 'agents' | 'config' | 'templates' | 'mcp' | 'settings';
 
 function App() {
   // App state
@@ -123,6 +128,12 @@ function App() {
     }
   };
 
+  const handleLoadTemplate = (yaml: string) => {
+    setConfigYaml(yaml);
+    validateConfig(yaml);
+    setActiveTab('config');
+  };
+
   const validateConfig = useCallback(async (yaml: string) => {
     try {
       const result = await invoke<ValidationResult>('config_validate', { yamlContent: yaml });
@@ -179,7 +190,18 @@ function App() {
   const selectedAgentData = agents.find(a => a.agent_id === selectedAgent);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+    <div className="min-h-screen bg-gradient-to-br from-zinc-900 via-zinc-800 to-zinc-900">
+      {/* Toast Container */}
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          style: {
+            background: '#27272a',
+            color: '#fff',
+            border: '1px solid #3f3f46',
+          },
+        }}
+      />
       {/* Header */}
       <header className="border-b border-slate-700 bg-slate-900/50 backdrop-blur sticky top-0 z-10">
         <div className="container mx-auto px-6 py-3">
@@ -198,13 +220,10 @@ function App() {
             <div className="flex items-center space-x-2">
               <button
                 onClick={loadAgents}
-                className="p-2 rounded-lg hover:bg-slate-800 transition-colors"
+                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                 title="Refresh"
               >
-                <RefreshCw className="w-4 h-4 text-slate-400" />
-              </button>
-              <button className="p-2 rounded-lg hover:bg-slate-800 transition-colors">
-                <Settings className="w-4 h-4 text-slate-400" />
+                <RefreshCw className="w-4 h-4 text-zinc-400" />
               </button>
             </div>
           </div>
@@ -218,7 +237,9 @@ function App() {
             {[
               { id: 'agents' as TabType, label: 'Agents', icon: Cpu },
               { id: 'config' as TabType, label: 'Configuration', icon: FileCode },
+              { id: 'templates' as TabType, label: 'Templates', icon: FileCode },
               { id: 'mcp' as TabType, label: 'MCP Tools', icon: Network },
+              { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
             ].map(({ id, label, icon: Icon }) => (
               <button
                 key={id}
@@ -457,18 +478,32 @@ function App() {
 
         {/* MCP Tools Tab */}
         {activeTab === 'mcp' && (
-          <div className="bg-slate-800/50 backdrop-blur rounded-lg border border-slate-700 p-8">
+          <div className="bg-zinc-800/50 backdrop-blur rounded-lg border border-zinc-700 p-8">
             <div className="text-center">
-              <Network className="w-16 h-16 text-slate-600 mx-auto mb-4" />
+              <Network className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
               <h2 className="text-xl font-semibold text-white mb-2">MCP Tools Browser</h2>
-              <p className="text-slate-400 mb-6">
+              <p className="text-zinc-400 mb-6">
                 Connect to Model Context Protocol servers to browse and test available tools.
               </p>
-              <button className="flex items-center space-x-2 px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white font-medium rounded-lg transition-colors mx-auto">
+              <button className="flex items-center space-x-2 px-6 py-3 bg-sky-400/60 hover:bg-sky-400/80 text-white font-medium rounded-lg transition-colors mx-auto">
                 <Plus className="w-4 h-4" />
                 <span>Connect MCP Server</span>
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Templates Tab */}
+        {activeTab === 'templates' && (
+          <div className="h-[calc(100vh-12rem)]">
+            <AgentTemplates onLoadTemplate={handleLoadTemplate} />
+          </div>
+        )}
+
+        {/* Settings Tab */}
+        {activeTab === 'settings' && (
+          <div className="h-[calc(100vh-12rem)]">
+            <Settings />
           </div>
         )}
       </main>

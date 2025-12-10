@@ -12,8 +12,8 @@ use serde_json::json;
 use std::collections::HashMap;
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_provider_creation() {
+#[tokio::test]
+async fn test_bedrock_provider_creation() {
     let mut extra = HashMap::new();
     extra.insert("region".to_string(), json!("us-east-1"));
 
@@ -30,14 +30,14 @@ fn test_bedrock_provider_creation() {
     };
 
     // Note: This will use AWS credentials from environment
-    let result = BedrockProvider::create(config);
+    let result = BedrockProvider::create(config).await;
     // May fail if AWS credentials not configured - that's expected
     assert!(result.is_ok() || result.is_err());
 }
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_provider_config() {
+#[tokio::test]
+async fn test_bedrock_provider_config() {
     let mut extra = HashMap::new();
     extra.insert("region".to_string(), json!("us-west-2"));
 
@@ -53,7 +53,7 @@ fn test_bedrock_provider_config() {
         extra,
     };
 
-    if let Ok(provider) = BedrockProvider::create(config) {
+    if let Ok(provider) = BedrockProvider::create(config).await {
         let returned_config = provider.config();
         assert_eq!(returned_config.model, "anthropic.claude-3-sonnet-20240229-v1:0");
         assert_eq!(returned_config.temperature, 0.3);
@@ -63,8 +63,8 @@ fn test_bedrock_provider_config() {
 }
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_provider_type() {
+#[tokio::test]
+async fn test_bedrock_provider_type() {
     let mut extra = HashMap::new();
     extra.insert("region".to_string(), json!("us-east-1"));
 
@@ -80,14 +80,14 @@ fn test_bedrock_provider_type() {
         extra,
     };
 
-    if let Ok(provider) = BedrockProvider::create(config) {
+    if let Ok(provider) = BedrockProvider::create(config).await {
         assert_eq!(provider.provider(), ModelProvider::Bedrock);
     }
 }
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_token_counting() {
+#[tokio::test]
+async fn test_bedrock_token_counting() {
     let mut extra = HashMap::new();
     extra.insert("region".to_string(), json!("us-east-1"));
 
@@ -103,7 +103,7 @@ fn test_bedrock_token_counting() {
         extra,
     };
 
-    if let Ok(provider) = BedrockProvider::create(config) {
+    if let Ok(provider) = BedrockProvider::create(config).await {
         // Test basic text
         let tokens = provider.count_tokens("Hello, world!");
         assert!(tokens > 0, "Should count tokens");
@@ -121,8 +121,8 @@ fn test_bedrock_token_counting() {
 }
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_region_configuration() {
+#[tokio::test]
+async fn test_bedrock_region_configuration() {
     let regions = vec!["us-east-1", "us-west-2", "eu-west-1", "ap-southeast-1"];
 
     for region in regions {
@@ -141,7 +141,7 @@ fn test_bedrock_region_configuration() {
             extra: extra.clone(),
         };
 
-        if let Ok(provider) = BedrockProvider::create(config) {
+        if let Ok(provider) = BedrockProvider::create(config).await {
             assert_eq!(
                 provider.config().extra.get("region"),
                 Some(&json!(region))
@@ -151,8 +151,8 @@ fn test_bedrock_region_configuration() {
 }
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_different_models() {
+#[tokio::test]
+async fn test_bedrock_different_models() {
     let models = vec![
         "anthropic.claude-3-sonnet-20240229-v1:0",
         "anthropic.claude-3-haiku-20240307-v1:0",
@@ -176,7 +176,7 @@ fn test_bedrock_different_models() {
             extra,
         };
 
-        if let Ok(provider) = BedrockProvider::create(config) {
+        if let Ok(provider) = BedrockProvider::create(config).await {
             assert_eq!(provider.config().model, model);
         }
     }
@@ -205,8 +205,8 @@ fn test_bedrock_request_structure() {
 }
 
 #[cfg(feature = "bedrock")]
-#[test]
-fn test_bedrock_temperature_override() {
+#[tokio::test]
+async fn test_bedrock_temperature_override() {
     let mut extra = HashMap::new();
     extra.insert("region".to_string(), json!("us-east-1"));
 
@@ -222,7 +222,7 @@ fn test_bedrock_temperature_override() {
         extra,
     };
 
-    if let Ok(_provider) = BedrockProvider::create(config) {
+    if let Ok(_provider) = BedrockProvider::create(config).await {
         let request = ModelRequest {
             messages: vec![RequestMessage {
                 role: MessageRole::User,
@@ -242,8 +242,8 @@ fn test_bedrock_temperature_override() {
 }
 
 #[cfg(not(feature = "bedrock"))]
-#[test]
-fn test_bedrock_feature_disabled() {
+#[tokio::test]
+async fn test_bedrock_feature_disabled() {
     use aof_core::{ModelConfig, ModelProvider};
     use aof_llm::provider::bedrock::BedrockProvider;
     use std::collections::HashMap;
@@ -260,6 +260,6 @@ fn test_bedrock_feature_disabled() {
         extra: HashMap::new(),
     };
 
-    let result = BedrockProvider::create(config);
+    let result = BedrockProvider::create(config).await;
     assert!(result.is_err(), "Should fail when bedrock feature is disabled");
 }

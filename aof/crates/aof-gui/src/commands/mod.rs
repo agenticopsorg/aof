@@ -4,6 +4,7 @@
 pub mod agent;
 pub mod config;
 pub mod mcp;
+pub mod settings;
 
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub use agent::*;
 pub use config::*;
 pub use mcp::*;
+pub use settings::*;
 
 /// Application info
 #[derive(Debug, Serialize, Deserialize)]
