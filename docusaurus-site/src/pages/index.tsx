@@ -21,13 +21,13 @@ function HomepageHeader() {
           <Link
             className="button button--secondary button--lg"
             to="/docs/getting-started">
-            Get Started in 5 Minutes ⚡
+            Get Started in 5 Minutes
           </Link>
           <Link
             className="button button--outline button--secondary button--lg"
             to="/docs/examples/"
             style={{marginLeft: '10px'}}>
-            View Examples 📚
+            View Examples
           </Link>
         </div>
       </div>
@@ -99,7 +99,7 @@ aofctl agent run k8s-agent.yaml`}
               <div className="col col--4">
                 <div className="card" style={{height: '100%'}}>
                   <div className="card__header">
-                    <h3>🎯 Incident Response</h3>
+                    <h3>Incident Response</h3>
                   </div>
                   <div className="card__body">
                     <p>
@@ -117,7 +117,7 @@ aofctl agent run k8s-agent.yaml`}
               <div className="col col--4">
                 <div className="card" style={{height: '100%'}}>
                   <div className="card__header">
-                    <h3>☸️ Kubernetes Management</h3>
+                    <h3>Kubernetes Management</h3>
                   </div>
                   <div className="card__body">
                     <p>
@@ -135,7 +135,7 @@ aofctl agent run k8s-agent.yaml`}
               <div className="col col--4">
                 <div className="card" style={{height: '100%'}}>
                   <div className="card__header">
-                    <h3>🤖 Workflow Automation</h3>
+                    <h3>Workflow Automation</h3>
                   </div>
                   <div className="card__body">
                     <p>
