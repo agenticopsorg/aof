@@ -113,6 +113,15 @@ pub fn get_migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        // Migration 7: Add tools column to mcp_servers for auto-connect
+        Migration {
+            version: 7,
+            description: "Add tools column to mcp_servers",
+            sql: r#"
+                ALTER TABLE mcp_servers ADD COLUMN tools TEXT;
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -123,6 +132,7 @@ pub struct DbMcpServer {
     pub name: String,
     pub command: String,
     pub args: String, // JSON array stored as string
+    pub tools: Option<String>, // JSON array of tool names (discovered on connect)
     pub created_at: String,
     pub updated_at: String,
 }
@@ -135,6 +145,7 @@ impl DbMcpServer {
             name,
             command,
             args: serde_json::to_string(&args).unwrap_or_else(|_| "[]".to_string()),
+            tools: None,
             created_at: now.clone(),
             updated_at: now,
         }
@@ -142,6 +153,12 @@ impl DbMcpServer {
 
     pub fn get_args_vec(&self) -> Vec<String> {
         serde_json::from_str(&self.args).unwrap_or_default()
+    }
+
+    pub fn get_tools_vec(&self) -> Vec<String> {
+        self.tools.as_ref()
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_default()
     }
 }
 

@@ -21,6 +21,7 @@ pub struct McpServerResponse {
     pub name: String,
     pub command: String,
     pub args: Vec<String>,
+    pub tools: Vec<String>,  // Discovered tools from this server
     pub created_at: String,
 }
 
@@ -31,6 +32,7 @@ impl From<DbMcpServer> for McpServerResponse {
             name: db.name.clone(),
             command: db.command.clone(),
             args: db.get_args_vec(),
+            tools: db.get_tools_vec(),
             created_at: db.created_at,
         }
     }
@@ -79,12 +81,17 @@ pub async fn db_load_mcp_servers(state: State<'_, AppState>) -> Result<Vec<McpSe
         .map(|row| {
             let args_json: String = row.get("args");
             let args: Vec<String> = serde_json::from_str(&args_json).unwrap_or_default();
+            let tools_json: Option<String> = row.get("tools");
+            let tools: Vec<String> = tools_json
+                .and_then(|s| serde_json::from_str(&s).ok())
+                .unwrap_or_default();
 
             McpServerResponse {
                 id: row.get("id"),
                 name: row.get("name"),
                 command: row.get("command"),
                 args,
+                tools,
                 created_at: row.get("created_at"),
             }
         })
@@ -126,12 +133,17 @@ pub async fn db_get_mcp_server(
     Ok(row.map(|row| {
         let args_json: String = row.get("args");
         let args: Vec<String> = serde_json::from_str(&args_json).unwrap_or_default();
+        let tools_json: Option<String> = row.get("tools");
+        let tools: Vec<String> = tools_json
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
 
         McpServerResponse {
             id: row.get("id"),
             name: row.get("name"),
             command: row.get("command"),
             args,
+            tools,
             created_at: row.get("created_at"),
         }
     }))

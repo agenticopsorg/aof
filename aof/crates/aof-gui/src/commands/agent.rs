@@ -8,6 +8,7 @@ use tauri::{Emitter, State};
 use uuid::Uuid;
 
 use crate::state::AppState;
+use crate::commands::mcp::auto_connect_for_tools;
 
 /// Agent run request
 #[derive(Debug, Deserialize)]
@@ -111,6 +112,48 @@ pub async fn agent_run(
 
     let agent_id = Uuid::new_v4().to_string();
     let agent_name = config.name.clone();
+
+    // Auto-connect to MCP servers if tools are configured
+    if !config.tools.is_empty() {
+        tracing::info!("Agent {} requires tools: {:?}, checking auto-connect...", agent_name, config.tools);
+
+        // Emit event to frontend
+        let _ = window.emit(
+            "agent-output",
+            serde_json::json!({
+                "agent_id": agent_id,
+                "content": format!("Checking MCP connections for tools: {:?}", config.tools),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            }),
+        );
+
+        match auto_connect_for_tools(&config.tools, state.inner(), &window).await {
+            Ok(connected) => {
+                if !connected.is_empty() {
+                    tracing::info!("Auto-connected {} MCP servers for tools", connected.len());
+                    let _ = window.emit(
+                        "agent-output",
+                        serde_json::json!({
+                            "agent_id": agent_id,
+                            "content": format!("Auto-connected {} MCP server(s) for tools", connected.len()),
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        }),
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to auto-connect MCP servers: {}", e);
+                let _ = window.emit(
+                    "agent-output",
+                    serde_json::json!({
+                        "agent_id": agent_id,
+                        "content": format!("Warning: Could not auto-connect MCP servers: {}", e),
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                    }),
+                );
+            }
+        }
+    }
 
     // Determine provider from model name and get appropriate API key
     let (provider, api_key_var) = if config.model.starts_with("gemini") || config.model.starts_with("google/") {

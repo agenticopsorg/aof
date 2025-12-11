@@ -61,6 +61,7 @@ interface DbMcpServer {
   name: string;
   command: string;
   args: string[];
+  tools: string[];  // Discovered tools from this server
   created_at: string;
 }
 
