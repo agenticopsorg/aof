@@ -48,6 +48,9 @@ interface McpConnectionInfo {
   connected_at?: string;
 }
 
+// Create store instance outside component to persist across renders
+const mcpStore = new Store('mcp-servers.json');
+
 export function MCPToolsBrowser() {
   const [servers, setServers] = useState<McpServer[]>([]);
   const [connections, setConnections] = useState<McpConnectionInfo[]>([]);
@@ -73,9 +76,9 @@ export function MCPToolsBrowser() {
 
   const loadSavedServers = async () => {
     try {
-      const store = new Store('mcp-servers.json');
-      const saved = await store.get<McpServer[]>('servers');
-      if (saved) {
+      const saved = await mcpStore.get<McpServer[]>('servers');
+      if (saved && Array.isArray(saved)) {
+        console.log('Loaded saved MCP servers:', saved.length);
         setServers(saved);
       }
     } catch (error) {
@@ -85,11 +88,12 @@ export function MCPToolsBrowser() {
 
   const saveServers = async (newServers: McpServer[]) => {
     try {
-      const store = new Store('mcp-servers.json');
-      await store.set('servers', newServers);
-      await store.save();
+      await mcpStore.set('servers', newServers);
+      await mcpStore.save();
+      console.log('Saved MCP servers:', newServers.length);
     } catch (error) {
       console.error('Failed to save servers:', error);
+      toast.error('Failed to save server configuration');
     }
   };
 
@@ -386,7 +390,9 @@ export function MCPToolsBrowser() {
                   {selectedTool.name}
                 </h2>
                 {selectedTool.description && (
-                  <p className="text-zinc-400 mb-4">{selectedTool.description}</p>
+                  <div className="text-zinc-400 mb-4 max-h-32 overflow-y-auto text-sm">
+                    {selectedTool.description}
+                  </div>
                 )}
 
                 {/* Parameters */}
@@ -408,9 +414,9 @@ export function MCPToolsBrowser() {
                             )}
                           </label>
                           {param.description && (
-                            <p className="text-xs text-zinc-500 mb-2">
+                            <div className="text-xs text-zinc-500 mb-2 max-h-20 overflow-y-auto">
                               {param.description}
-                            </p>
+                            </div>
                           )}
                           {param.enum ? (
                             <select
