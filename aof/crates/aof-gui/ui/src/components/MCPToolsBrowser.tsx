@@ -88,7 +88,7 @@ export function MCPToolsBrowser() {
 
   const loadTools = async (connectionId: string) => {
     try {
-      const tools = await invoke<McpTool[]>('mcp_list_tools', { connectionId });
+      const tools = await invoke<McpTool[]>('mcp_list_tools', { connection_id: connectionId });
       setAvailableTools(tools);
     } catch (error) {
       console.error('Failed to load tools:', error);
@@ -101,7 +101,7 @@ export function MCPToolsBrowser() {
       const result = await invokeWithToast<{ id: string }>(
         'mcp_connect',
         {
-          serverCommand: server.command || '',
+          server_command: server.command || '',
           args: server.args || [],
         },
         {
@@ -119,7 +119,7 @@ export function MCPToolsBrowser() {
 
   const handleDisconnect = async (connectionId: string) => {
     try {
-      await invokeWithToast('mcp_disconnect', { connectionId }, {
+      await invokeWithToast('mcp_disconnect', { connection_id: connectionId }, {
         loading: 'Disconnecting...',
         success: 'Disconnected',
         error: 'Failed to disconnect',
@@ -142,8 +142,8 @@ export function MCPToolsBrowser() {
     try {
       const response = await invoke<{ success: boolean; result: any; error?: string }>('mcp_call_tool', {
         request: {
-          connectionId: selectedServer,
-          toolName: selectedTool.name,
+          connection_id: selectedServer,
+          tool_name: selectedTool.name,
           arguments: toolInput,
         }
       });
