@@ -3,10 +3,7 @@
 use aof_core::tool::ToolDefinition;
 use aof_mcp::{McpClient, McpClientBuilder};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
 use tauri::{Emitter, State};
-use tokio::sync::RwLock;
 
 use crate::state::AppState;
 

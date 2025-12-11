@@ -108,6 +108,14 @@ function App() {
       })
     );
 
+    listeners.push(
+      listen<{ agent_id: string; error: string }>('agent-error', (event) => {
+        console.error('Agent error:', event.payload.error);
+        loadAgents();
+        setIsRunning(false);
+      })
+    );
+
     return () => {
       listeners.forEach(p => p.then(unlisten => unlisten()));
     };

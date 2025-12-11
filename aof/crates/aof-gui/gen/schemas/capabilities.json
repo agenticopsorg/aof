@@ -1,1 +1,1 @@
-{}
+{"default":{"identifier":"default","description":"Default capabilities for AOF Desktop","local":true,"windows":["main"],"permissions":["core:default","core:event:default","core:event:allow-listen","core:event:allow-emit","core:window:default","core:window:allow-close","core:window:allow-set-title","core:app:default","core:path:default","store:default","sql:default","sql:allow-load","sql:allow-execute","sql:allow-select","sql:allow-close"]}}

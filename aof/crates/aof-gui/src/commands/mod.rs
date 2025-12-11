@@ -4,7 +4,10 @@
 pub mod agent;
 pub mod config;
 pub mod db;
+pub mod integrations;
 pub mod mcp;
+pub mod memory;
+pub mod monitoring;
 pub mod settings;
 
 use serde::{Deserialize, Serialize};
@@ -13,7 +16,10 @@ use serde::{Deserialize, Serialize};
 pub use agent::*;
 pub use config::*;
 pub use db::*;
+pub use integrations::*;
 pub use mcp::*;
+pub use memory::*;
+pub use monitoring::*;
 pub use settings::*;
 
 /// Application info

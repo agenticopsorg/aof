@@ -97,6 +97,22 @@ pub fn get_migrations() -> Vec<Migration> {
             "#,
             kind: MigrationKind::Up,
         },
+        // Migration 6: Create provider_api_keys table
+        Migration {
+            version: 6,
+            description: "Create provider_api_keys table",
+            sql: r#"
+                CREATE TABLE IF NOT EXISTS provider_api_keys (
+                    provider TEXT PRIMARY KEY NOT NULL,
+                    api_key TEXT NOT NULL,
+                    base_url TEXT,
+                    default_model TEXT,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+            "#,
+            kind: MigrationKind::Up,
+        },
     ]
 }
 
@@ -166,4 +182,29 @@ pub struct DbConversation {
     pub content: String,
     pub timestamp: String,
     pub metadata: Option<String>, // JSON object stored as string
+}
+
+/// Provider API Key database model
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DbProviderApiKey {
+    pub provider: String,
+    pub api_key: String,
+    pub base_url: Option<String>,
+    pub default_model: Option<String>,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
+impl DbProviderApiKey {
+    pub fn new(provider: String, api_key: String, base_url: Option<String>, default_model: Option<String>) -> Self {
+        let now = chrono::Utc::now().to_rfc3339();
+        Self {
+            provider,
+            api_key,
+            base_url,
+            default_model,
+            created_at: now.clone(),
+            updated_at: now,
+        }
+    }
 }

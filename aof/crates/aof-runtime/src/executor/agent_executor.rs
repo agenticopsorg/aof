@@ -391,28 +391,32 @@ impl AgentExecutor {
     /// 5. Handle response (execute tools if needed)
     /// 6. Repeat until done or max iterations
     pub async fn execute(&self, context: &mut AgentContext) -> AofResult<String> {
-        info!("Starting agent execution: {}", self.config.name);
+        warn!("=== AGENT EXECUTOR START === name={}", self.config.name);
         let execution_start = Instant::now();
 
         // Restore conversation history from memory if available
         if let Some(memory) = &self.memory {
+            warn!("[EXECUTOR] Restoring conversation history from memory...");
             self.restore_conversation_history(context, memory).await?;
+            warn!("[EXECUTOR] Memory restore complete");
         }
 
         // Add user message if not already in history
         if context.messages.is_empty() {
+            warn!("[EXECUTOR] Adding user message to context: {:?}", context.input.chars().take(50).collect::<String>());
             context.add_message(MessageRole::User, context.input.clone());
         }
 
         let mut iteration = 0;
         let max_iterations = self.config.max_iterations;
+        warn!("[EXECUTOR] Starting execution loop, max_iterations={}", max_iterations);
 
         loop {
             iteration += 1;
 
             if iteration > max_iterations {
-                warn!(
-                    "Reached max iterations ({}) for agent: {}",
+                error!(
+                    "[EXECUTOR] Reached max iterations ({}) for agent: {}",
                     max_iterations, self.config.name
                 );
                 return Err(AofError::agent(format!(
@@ -421,20 +425,48 @@ impl AgentExecutor {
                 )));
             }
 
-            debug!(
-                "Agent iteration {}/{} for: {}",
+            warn!(
+                "[EXECUTOR] Iteration {}/{} for agent: {}",
                 iteration, max_iterations, self.config.name
             );
 
             // Build model request
-            let request = self.build_model_request(context)?;
+            warn!("[EXECUTOR] Building model request...");
+            let request = match self.build_model_request(context) {
+                Ok(req) => {
+                    warn!("[EXECUTOR] Model request built: messages={}, tools={}, system={:?}",
+                        req.messages.len(),
+                        req.tools.len(),
+                        req.system.as_ref().map(|s| s.chars().take(30).collect::<String>())
+                    );
+                    req
+                }
+                Err(e) => {
+                    error!("[EXECUTOR] Failed to build model request: {:?}", e);
+                    return Err(e);
+                }
+            };
 
             // Call model
-            let response = self
-                .model
-                .generate(&request)
-                .await
-                .map_err(|e| AofError::agent(format!("Model generation failed: {}", e)))?;
+            warn!("[EXECUTOR] Calling model.generate()...");
+            let generate_start = Instant::now();
+            let response = match self.model.generate(&request).await {
+                Ok(resp) => {
+                    warn!("[EXECUTOR] model.generate() SUCCESS in {}ms: stop_reason={:?}, content_len={}, tool_calls={}",
+                        generate_start.elapsed().as_millis(),
+                        resp.stop_reason,
+                        resp.content.len(),
+                        resp.tool_calls.len()
+                    );
+                    resp
+                }
+                Err(e) => {
+                    error!("[EXECUTOR] model.generate() FAILED in {}ms: {:?}",
+                        generate_start.elapsed().as_millis(), e
+                    );
+                    return Err(AofError::agent(format!("Model generation failed: {}", e)));
+                }
+            };
 
             // Update usage statistics
             context.metadata.input_tokens += response.usage.input_tokens;
@@ -533,6 +565,8 @@ impl AgentExecutor {
 
     /// Build a model request from the current context
     fn build_model_request(&self, context: &AgentContext) -> AofResult<ModelRequest> {
+        warn!("[BUILD_REQUEST] Building model request...");
+
         // Convert context messages to request messages
         let messages: Vec<RequestMessage> = context
             .messages
@@ -549,10 +583,17 @@ impl AgentExecutor {
             })
             .collect();
 
+        warn!("[BUILD_REQUEST] Converted {} messages", messages.len());
+
         // Get tool definitions if available
         let tools: Vec<ModelToolDefinition> = if let Some(executor) = &self.tool_executor {
-            executor
-                .list_tools()
+            warn!("[BUILD_REQUEST] Tool executor available, listing tools...");
+            let tool_defs = executor.list_tools();
+            warn!("[BUILD_REQUEST] Got {} tool definitions from executor", tool_defs.len());
+            for t in &tool_defs {
+                warn!("[BUILD_REQUEST] Tool: name={}, desc_len={}", t.name, t.description.len());
+            }
+            tool_defs
                 .into_iter()
                 .map(|t| ModelToolDefinition {
                     name: t.name,
@@ -561,8 +602,15 @@ impl AgentExecutor {
                 })
                 .collect()
         } else {
+            warn!("[BUILD_REQUEST] No tool executor, tools will be empty");
             Vec::new()
         };
+
+        warn!("[BUILD_REQUEST] Final: messages={}, tools={}, system_prompt={:?}",
+            messages.len(),
+            tools.len(),
+            self.config.system_prompt.as_ref().map(|s| s.len())
+        );
 
         Ok(ModelRequest {
             messages,

@@ -15,7 +15,7 @@ pub fn run() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "aof_gui=debug,aof_core=debug,aof_mcp=debug".into()),
+                .unwrap_or_else(|_| "aof_gui=debug,aof_core=debug,aof_mcp=debug,aof_runtime=warn,aof_llm=warn".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -80,11 +80,17 @@ pub fn run() {
             commands::mcp_list_tools,
             commands::mcp_call_tool,
             commands::mcp_get_tool,
-            // Database commands
+            // Database commands - MCP servers
             commands::db_save_mcp_server,
             commands::db_load_mcp_servers,
             commands::db_delete_mcp_server,
             commands::db_get_mcp_server,
+            // Database commands - Provider API keys
+            commands::db_save_provider_api_key,
+            commands::db_load_provider_api_keys,
+            commands::db_delete_provider_api_key,
+            commands::db_get_provider_api_key,
+            commands::db_get_provider_config,
             // Settings commands
             commands::settings_get,
             commands::settings_update,
@@ -93,6 +99,13 @@ pub fn run() {
             commands::settings_import,
             commands::provider_test_connection,
             commands::provider_list_models,
+            // Memory commands
+            commands::memory_get_entries,
+            // Integrations commands
+            commands::integrations_list,
+            commands::integrations_get_logs,
+            // Monitoring commands
+            commands::monitoring_get_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

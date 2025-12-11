@@ -153,12 +153,14 @@ pub struct AgentMetadata {
 }
 
 /// Agent configuration
+/// Supports both flat format and Kubernetes-style format
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(from = "AgentConfigInput")]
 pub struct AgentConfig {
     /// Agent name
     pub name: String,
 
-    /// System prompt
+    /// System prompt (also accepts "instructions" alias)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt: Option<String>,
 
@@ -188,6 +190,102 @@ pub struct AgentConfig {
     /// Custom configuration
     #[serde(flatten)]
     pub extra: HashMap<String, serde_json::Value>,
+}
+
+/// Internal type for flexible config parsing
+/// Supports both flat format and Kubernetes-style format
+#[derive(Debug, Clone, Deserialize)]
+#[serde(untagged)]
+enum AgentConfigInput {
+    /// Flat format (original) - try this first since it has required fields
+    Flat(FlatAgentConfig),
+    /// Kubernetes-style format with apiVersion, kind, metadata, spec
+    Kubernetes(KubernetesConfig),
+}
+
+/// Kubernetes-style config wrapper
+#[derive(Debug, Clone, Deserialize)]
+struct KubernetesConfig {
+    #[serde(rename = "apiVersion")]
+    api_version: String,  // Required for K8s format
+    kind: String,         // Required for K8s format
+    metadata: KubernetesMetadata,
+    spec: AgentSpec,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct KubernetesMetadata {
+    name: String,
+    #[serde(default)]
+    labels: HashMap<String, String>,
+    #[serde(default)]
+    annotations: HashMap<String, String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct AgentSpec {
+    model: String,
+    #[serde(alias = "system_prompt")]
+    instructions: Option<String>,
+    #[serde(default)]
+    tools: Vec<String>,
+    memory: Option<String>,
+    #[serde(default = "default_max_iterations")]
+    max_iterations: usize,
+    #[serde(default = "default_temperature")]
+    temperature: f32,
+    max_tokens: Option<usize>,
+    #[serde(flatten)]
+    extra: HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct FlatAgentConfig {
+    name: String,
+    #[serde(alias = "instructions")]
+    system_prompt: Option<String>,
+    model: String,
+    #[serde(default)]
+    tools: Vec<String>,
+    memory: Option<String>,
+    #[serde(default = "default_max_iterations")]
+    max_iterations: usize,
+    #[serde(default = "default_temperature")]
+    temperature: f32,
+    max_tokens: Option<usize>,
+    #[serde(flatten)]
+    extra: HashMap<String, serde_json::Value>,
+}
+
+impl From<AgentConfigInput> for AgentConfig {
+    fn from(input: AgentConfigInput) -> Self {
+        match input {
+            AgentConfigInput::Flat(flat) => AgentConfig {
+                name: flat.name,
+                system_prompt: flat.system_prompt,
+                model: flat.model,
+                tools: flat.tools,
+                memory: flat.memory,
+                max_iterations: flat.max_iterations,
+                temperature: flat.temperature,
+                max_tokens: flat.max_tokens,
+                extra: flat.extra,
+            },
+            AgentConfigInput::Kubernetes(k8s) => {
+                AgentConfig {
+                    name: k8s.metadata.name,
+                    system_prompt: k8s.spec.instructions,
+                    model: k8s.spec.model,
+                    tools: k8s.spec.tools,
+                    memory: k8s.spec.memory,
+                    max_iterations: k8s.spec.max_iterations,
+                    temperature: k8s.spec.temperature,
+                    max_tokens: k8s.spec.max_tokens,
+                    extra: k8s.spec.extra,
+                }
+            }
+        }
+    }
 }
 
 fn default_max_iterations() -> usize {

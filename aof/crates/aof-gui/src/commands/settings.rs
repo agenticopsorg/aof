@@ -74,6 +74,33 @@ impl Default for AppSettings {
 pub async fn settings_get(state: State<'_, AppState>) -> Result<AppSettings, String> {
     let settings = state.settings.read().await;
 
+    // Get default providers
+    let mut providers = AppSettings::default().providers;
+
+    // Load saved API keys from database
+    if let Ok(db) = state.get_db().await {
+        for provider in &mut providers {
+            let row = sqlx::query("SELECT api_key, base_url, default_model FROM provider_api_keys WHERE provider = ?")
+                .bind(&provider.provider)
+                .fetch_optional(&db)
+                .await;
+
+            if let Ok(Some(row)) = row {
+                use sqlx::Row;
+                provider.api_key = row.get::<Option<String>, _>("api_key");
+                if let Some(base_url) = row.get::<Option<String>, _>("base_url") {
+                    provider.base_url = Some(base_url);
+                }
+                if let Some(default_model) = row.get::<Option<String>, _>("default_model") {
+                    if !default_model.is_empty() {
+                        provider.default_model = default_model;
+                    }
+                }
+                tracing::debug!("Loaded API key for {} from database", provider.provider);
+            }
+        }
+    }
+
     // Convert internal AppSettings to command AppSettings
     let app_settings = AppSettings {
         theme: settings.theme.clone(),
@@ -82,7 +109,7 @@ pub async fn settings_get(state: State<'_, AppState>) -> Result<AppSettings, Str
         default_max_tokens: 4096, // TODO: Add to state
         auto_save: settings.auto_save,
         log_level: settings.log_level.clone(),
-        providers: AppSettings::default().providers, // Load from config
+        providers,
     };
 
     Ok(app_settings)
@@ -94,12 +121,41 @@ pub async fn settings_update(
     settings: AppSettings,
     state: State<'_, AppState>,
 ) -> Result<(), String> {
-    let mut app_settings = state.settings.write().await;
+    // Update in-memory settings
+    {
+        let mut app_settings = state.settings.write().await;
+        app_settings.theme = settings.theme.clone();
+        app_settings.default_temperature = settings.default_temperature;
+        app_settings.auto_save = settings.auto_save;
+        app_settings.log_level = settings.log_level.clone();
+    }
 
-    app_settings.theme = settings.theme;
-    app_settings.default_temperature = settings.default_temperature;
-    app_settings.auto_save = settings.auto_save;
-    app_settings.log_level = settings.log_level;
+    // Persist provider API keys to database
+    let db = state.get_db().await?;
+    for provider in &settings.providers {
+        if let Some(api_key) = &provider.api_key {
+            if !api_key.is_empty() {
+                tracing::info!("Saving API key for provider: {} to database", provider.provider);
+
+                let now = chrono::Utc::now().to_rfc3339();
+                sqlx::query(
+                    "INSERT OR REPLACE INTO provider_api_keys (provider, api_key, base_url, default_model, created_at, updated_at) VALUES (?, ?, ?, ?, COALESCE((SELECT created_at FROM provider_api_keys WHERE provider = ?), ?), ?)"
+                )
+                .bind(&provider.provider)
+                .bind(api_key)
+                .bind(&provider.base_url)
+                .bind(&provider.default_model)
+                .bind(&provider.provider)
+                .bind(&now)
+                .bind(&now)
+                .execute(&db)
+                .await
+                .map_err(|e| format!("Failed to save API key for {}: {}", provider.provider, e))?;
+
+                tracing::info!("✓ Saved API key for provider: {}", provider.provider);
+            }
+        }
+    }
 
     tracing::info!("Settings updated successfully");
     Ok(())
