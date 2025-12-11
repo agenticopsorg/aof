@@ -187,7 +187,9 @@ pub struct ToolCall {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ToolDefinition {
     pub name: String,
+    #[serde(default)]
     pub description: String,
+    #[serde(alias = "inputSchema")]
     pub parameters: serde_json::Value,
 }
 
