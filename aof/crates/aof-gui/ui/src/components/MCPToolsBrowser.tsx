@@ -165,9 +165,11 @@ export function MCPToolsBrowser() {
 
     try {
       const response = await invoke<{ success: boolean; result: any; error?: string }>('mcp_call_tool', {
-        connection_id: selectedServer,
-        tool_name: selectedTool.name,
-        arguments: toolInput,
+        request: {
+          connection_id: selectedServer,
+          tool_name: selectedTool.name,
+          arguments: toolInput,
+        }
       });
 
       if (response.success) {
