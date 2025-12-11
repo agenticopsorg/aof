@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
+import { Store } from '@tauri-apps/plugin-store';
 import {
   Server, Plug, PlayCircle, AlertCircle,
   Loader2, Plus, X
@@ -67,7 +68,30 @@ export function MCPToolsBrowser() {
 
   useEffect(() => {
     loadConnections();
+    loadSavedServers();
   }, []);
+
+  const loadSavedServers = async () => {
+    try {
+      const store = new Store('mcp-servers.json');
+      const saved = await store.get<McpServer[]>('servers');
+      if (saved) {
+        setServers(saved);
+      }
+    } catch (error) {
+      console.error('Failed to load saved servers:', error);
+    }
+  };
+
+  const saveServers = async (newServers: McpServer[]) => {
+    try {
+      const store = new Store('mcp-servers.json');
+      await store.set('servers', newServers);
+      await store.save();
+    } catch (error) {
+      console.error('Failed to save servers:', error);
+    }
+  };
 
   useEffect(() => {
     if (selectedServer) {
@@ -141,11 +165,9 @@ export function MCPToolsBrowser() {
 
     try {
       const response = await invoke<{ success: boolean; result: any; error?: string }>('mcp_call_tool', {
-        request: {
-          connectionId: selectedServer,
-          toolName: selectedTool.name,
-          arguments: toolInput,
-        }
+        connection_id: selectedServer,
+        tool_name: selectedTool.name,
+        arguments: toolInput,
       });
 
       if (response.success) {
@@ -163,7 +185,7 @@ export function MCPToolsBrowser() {
     }
   };
 
-  const handleAddServer = () => {
+  const handleAddServer = async () => {
     const server: McpServer = {
       id: `server-${Date.now()}`,
       name: newServer.name,
@@ -176,7 +198,9 @@ export function MCPToolsBrowser() {
       status: 'disconnected',
     };
 
-    setServers([...servers, server]);
+    const updatedServers = [...servers, server];
+    setServers(updatedServers);
+    await saveServers(updatedServers);
     setShowAddServer(false);
     setNewServer({
       name: '',
@@ -185,6 +209,12 @@ export function MCPToolsBrowser() {
       args: '',
       url: '',
     });
+  };
+
+  const handleRemoveServer = async (serverId: string) => {
+    const updatedServers = servers.filter(s => s.id !== serverId);
+    setServers(updatedServers);
+    await saveServers(updatedServers);
   };
 
 
@@ -273,7 +303,7 @@ export function MCPToolsBrowser() {
                       Connect
                     </button>
                     <button
-                      onClick={() => setServers(servers.filter(s => s.id !== server.id))}
+                      onClick={() => handleRemoveServer(server.id)}
                       className="p-1 hover:bg-zinc-700 rounded"
                     >
                       <X className="w-4 h-4 text-zinc-400" />
