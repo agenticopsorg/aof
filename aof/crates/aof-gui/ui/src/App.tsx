@@ -4,17 +4,17 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import {
   Terminal, Cpu, Network, Settings as SettingsIcon, Play, Square,
   FileCode, Check, AlertCircle, Loader2, Trash2,
-  Plus, RefreshCw, Brain, MessageCircle, BarChart3
+  RefreshCw, Brain, MessageCircle, BarChart3
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { Settings } from './components/Settings';
-import { StreamingOutput } from './components/StreamingOutput';
 import { AgentTemplates } from './components/AgentTemplates';
 import { MCPToolsBrowser } from './components/MCPToolsBrowser';
 import { MemoryViewer } from './components/MemoryViewer';
 import { PlatformIntegrations } from './components/PlatformIntegrations';
 import { SystemMonitoring } from './components/SystemMonitoring';
-import { toast, invokeWithToast } from './lib/toast';
+import { MarkdownRenderer } from './components/MarkdownRenderer';
+import './lib/toast';
 import './App.css';
 
 // Types
@@ -28,7 +28,8 @@ interface AgentStatus {
   agent_id: string;
   name: string;
   status: 'pending' | 'running' | 'completed' | 'failed' | 'stopped';
-  output: string[];
+  output: string[];      // Status logs (legacy)
+  response?: string;     // The actual LLM response
   metadata?: {
     input_tokens: number;
     output_tokens: number;
@@ -38,6 +39,7 @@ interface AgentStatus {
   };
   started_at?: string;
   finished_at?: string;
+  error?: string;
 }
 
 interface ValidationResult {
@@ -95,9 +97,21 @@ function App() {
     );
 
     listeners.push(
-      listen<{ agent_id: string }>('agent-completed', () => {
-        loadAgents();
+      listen<{ agent_id: string; result: string; execution_time_ms: number; metadata?: AgentStatus['metadata'] }>('agent-completed', (event) => {
+        // Update the agent directly with the response from the event
+        setAgents(prev => prev.map(a =>
+          a.agent_id === event.payload.agent_id
+            ? {
+                ...a,
+                status: 'completed' as const,
+                response: event.payload.result,
+                metadata: event.payload.metadata || a.metadata,
+              }
+            : a
+        ));
         setIsRunning(false);
+        // Also refresh the full list to get any other updates
+        loadAgents();
       })
     );
 
@@ -335,17 +349,24 @@ function App() {
                   </button>
                 )}
               </div>
-              <div className="p-4 h-80 overflow-y-auto font-mono text-sm">
+              <div className="p-4 h-[500px] overflow-y-auto">
                 {selectedAgentData ? (
-                  <div className="space-y-1">
-                    {selectedAgentData.output.map((line, i) => (
-                      <div key={i} className="text-slate-300">{line}</div>
-                    ))}
-                    {selectedAgentData.status === 'running' && (
+                  <div>
+                    {/* Show actual LLM response with markdown rendering */}
+                    {selectedAgentData.response ? (
+                      <MarkdownRenderer content={selectedAgentData.response} />
+                    ) : selectedAgentData.status === 'running' ? (
                       <div className="flex items-center space-x-2 text-blue-400">
-                        <Loader2 className="w-3 h-3 animate-spin" />
-                        <span>Processing...</span>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <span>Processing request...</span>
                       </div>
+                    ) : selectedAgentData.error ? (
+                      <div className="p-4 bg-red-900/20 border border-red-700 rounded-lg">
+                        <p className="text-red-400 font-medium">Error</p>
+                        <p className="text-red-300 mt-1">{selectedAgentData.error}</p>
+                      </div>
+                    ) : (
+                      <p className="text-slate-500">Waiting for response...</p>
                     )}
                   </div>
                 ) : (

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileCode, Search, Loader2, ChevronRight } from 'lucide-react';
+import { FileCode, Search, ChevronRight } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Template {

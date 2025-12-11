@@ -30,7 +30,8 @@ pub struct AgentStatusResponse {
     pub agent_id: String,
     pub name: String,
     pub status: AgentStatus,
-    pub output: Vec<String>,
+    pub output: Vec<String>,       // Status logs (legacy, kept for compatibility)
+    pub response: Option<String>,  // The actual LLM response
     pub metadata: Option<ExecutionMetadataResponse>,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
@@ -89,7 +90,8 @@ pub struct AgentRuntime {
     pub name: String,
     pub config: AgentConfig,
     pub status: AgentStatus,
-    pub output: Vec<String>,
+    pub output: Vec<String>,      // Legacy: status logs
+    pub response: Option<String>, // The actual LLM response
     pub metadata: Option<ExecutionMetadata>,
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -188,7 +190,8 @@ pub async fn agent_run(
         name: agent_name.clone(),
         config: config.clone(),
         status: AgentStatus::Pending,
-        output: vec![format!("Initializing agent: {}", agent_name)],
+        output: vec![],  // Status logs (not shown in main output)
+        response: None,  // The actual LLM response
         metadata: None,
         started_at: Some(chrono::Utc::now()),
         finished_at: None,
@@ -563,11 +566,7 @@ async fn execute_agent_with_runtime(
                 let mut agents = state.agents.write().await;
                 if let Some(runtime) = agents.get_mut(&agent_id) {
                     runtime.status = AgentStatus::Completed;
-                    runtime.output.push(format!(
-                        "[{}] Agent completed successfully",
-                        chrono::Utc::now().format("%H:%M:%S")
-                    ));
-                    runtime.output.push(output.clone());
+                    runtime.response = Some(output.clone()); // Store actual response separately
                     runtime.finished_at = Some(chrono::Utc::now());
                     runtime.metadata = Some(ctx.metadata.clone());
                 }
@@ -679,6 +678,7 @@ pub async fn agent_status(
             name: runtime.name.clone(),
             status: runtime.status.clone(),
             output: runtime.output.clone(),
+            response: runtime.response.clone(),
             metadata: runtime.metadata.clone().map(|m| m.into()),
             started_at: runtime.started_at.map(|t| t.to_rfc3339()),
             finished_at: runtime.finished_at.map(|t| t.to_rfc3339()),
@@ -701,6 +701,7 @@ pub async fn agent_list(state: State<'_, AppState>) -> Result<Vec<AgentStatusRes
             name: runtime.name.clone(),
             status: runtime.status.clone(),
             output: runtime.output.clone(),
+            response: runtime.response.clone(),
             metadata: runtime.metadata.clone().map(|m| m.into()),
             started_at: runtime.started_at.map(|t| t.to_rfc3339()),
             finished_at: runtime.finished_at.map(|t| t.to_rfc3339()),

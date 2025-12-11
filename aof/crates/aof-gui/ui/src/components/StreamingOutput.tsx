@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { listen, UnlistenFn } from '@tauri-apps/api/event';
-import { Loader2, Pause, Play, StopCircle, Copy, Check } from 'lucide-react';
+import { Loader2, Pause, Play, Copy, Check } from 'lucide-react';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface StreamingOutputProps {
   agentId: string;
@@ -174,15 +175,15 @@ export function StreamingOutput({ agentId, onComplete }: StreamingOutputProps) {
       {/* Streaming Output */}
       <div
         ref={outputRef}
-        className="flex-1 overflow-y-auto p-4 font-mono text-sm leading-relaxed"
+        className="flex-1 overflow-y-auto p-4 text-sm leading-relaxed"
       >
         {chunks.length === 0 ? (
           <div className="flex items-center justify-center h-full text-zinc-500">
             Waiting for response...
           </div>
         ) : (
-          <div className="text-zinc-200 whitespace-pre-wrap">
-            {fullContent}
+          <div className="text-zinc-200">
+            <MarkdownRenderer content={fullContent} />
             {isStreaming && !isPaused && (
               <span className="inline-block w-2 h-4 ml-1 bg-sky-400 animate-pulse" />
             )}

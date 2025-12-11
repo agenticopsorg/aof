@@ -66,7 +66,7 @@ interface DbMcpServer {
 
 export function MCPToolsBrowser() {
   const [servers, setServers] = useState<McpServer[]>([]);
-  const [dbReady, setDbReady] = useState(false);
+  const [_dbReady, setDbReady] = useState(false);
   const [connections, setConnections] = useState<McpConnectionInfo[]>([]);
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
   const [selectedTool, setSelectedTool] = useState<McpTool | null>(null);
