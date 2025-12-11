@@ -26,17 +26,20 @@ interface McpTool {
   }>;
 }
 
-interface McpConnection {
-  server_id: string;
-  server_name: string;
-  tools: McpTool[];
+interface McpConnectionInfo {
+  id: string;
+  server_command: string;
+  status: 'connected' | 'connecting' | 'disconnected' | 'error';
+  tools_count: number;
+  connected_at?: string;
 }
 
 export function MCPToolsBrowser() {
   const [servers, setServers] = useState<McpServer[]>([]);
-  const [connections, setConnections] = useState<McpConnection[]>([]);
+  const [connections, setConnections] = useState<McpConnectionInfo[]>([]);
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
   const [selectedTool, setSelectedTool] = useState<McpTool | null>(null);
+  const [availableTools, setAvailableTools] = useState<McpTool[]>([]);
   const [toolInput, setToolInput] = useState<Record<string, string>>({});
   const [toolResult, setToolResult] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
@@ -53,25 +56,40 @@ export function MCPToolsBrowser() {
     loadConnections();
   }, []);
 
+  useEffect(() => {
+    if (selectedServer) {
+      loadTools(selectedServer);
+    } else {
+      setAvailableTools([]);
+    }
+  }, [selectedServer]);
+
   const loadConnections = async () => {
     try {
-      const conns = await invoke<McpConnection[]>('mcp_list_connections');
+      const conns = await invoke<McpConnectionInfo[]>('mcp_list_connections');
       setConnections(conns);
     } catch (error) {
       console.error('Failed to load MCP connections:', error);
     }
   };
 
+  const loadTools = async (connectionId: string) => {
+    try {
+      const tools = await invoke<McpTool[]>('mcp_list_tools', { connection_id: connectionId });
+      setAvailableTools(tools);
+    } catch (error) {
+      console.error('Failed to load tools:', error);
+      setAvailableTools([]);
+    }
+  };
+
   const handleConnect = async (server: McpServer) => {
     try {
-      await invokeWithToast(
+      const result = await invokeWithToast<{ id: string }>(
         'mcp_connect',
         {
-          serverId: server.id,
-          transport: server.transport,
-          command: server.command,
-          args: server.args,
-          url: server.url,
+          server_command: server.command || '',
+          args: server.args || [],
         },
         {
           loading: `Connecting to ${server.name}...`,
@@ -80,21 +98,21 @@ export function MCPToolsBrowser() {
         }
       );
       await loadConnections();
-      setSelectedServer(server.id);
+      setSelectedServer(result.id);
     } catch (error) {
       console.error('Connection failed:', error);
     }
   };
 
-  const handleDisconnect = async (serverId: string) => {
+  const handleDisconnect = async (connectionId: string) => {
     try {
-      await invokeWithToast('mcp_disconnect', { serverId }, {
+      await invokeWithToast('mcp_disconnect', { connection_id: connectionId }, {
         loading: 'Disconnecting...',
         success: 'Disconnected',
         error: 'Failed to disconnect',
       });
       await loadConnections();
-      if (selectedServer === serverId) {
+      if (selectedServer === connectionId) {
         setSelectedServer(null);
       }
     } catch (error) {
@@ -109,14 +127,21 @@ export function MCPToolsBrowser() {
     setToolResult(null);
 
     try {
-      const result = await invoke<string>('mcp_call_tool', {
-        serverId: selectedServer,
-        toolName: selectedTool.name,
-        parameters: toolInput,
+      const response = await invoke<{ success: boolean; result: any; error?: string }>('mcp_call_tool', {
+        request: {
+          connection_id: selectedServer,
+          tool_name: selectedTool.name,
+          arguments: toolInput,
+        }
       });
 
-      setToolResult(result);
-      toast.success('Tool executed successfully');
+      if (response.success) {
+        setToolResult(JSON.stringify(response.result, null, 2));
+        toast.success('Tool executed successfully');
+      } else {
+        setToolResult(`Error: ${response.error}`);
+        toast.error('Tool execution failed', response.error);
+      }
     } catch (error) {
       toast.error('Tool execution failed', String(error));
       setToolResult(`Error: ${error}`);
@@ -149,8 +174,6 @@ export function MCPToolsBrowser() {
     });
   };
 
-  const selectedConnection = connections.find(c => c.server_id === selectedServer);
-  const availableTools = selectedConnection?.tools || [];
 
   return (
     <div className="flex h-full">
@@ -182,25 +205,30 @@ export function MCPToolsBrowser() {
             <>
               {connections.map(conn => (
                 <div
-                  key={conn.server_id}
-                  onClick={() => setSelectedServer(conn.server_id)}
+                  key={conn.id}
+                  onClick={() => setSelectedServer(conn.id)}
                   className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedServer === conn.server_id
+                    selectedServer === conn.id
                       ? 'border-sky-400/60 bg-sky-400/10'
                       : 'border-zinc-700 bg-zinc-800/50 hover:border-zinc-600'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center space-x-2">
-                      <div className="w-2 h-2 rounded-full bg-green-400" />
+                      <div className={`w-2 h-2 rounded-full ${
+                        conn.status === 'connected' ? 'bg-green-400' :
+                        conn.status === 'connecting' ? 'bg-yellow-400' :
+                        conn.status === 'error' ? 'bg-red-400' :
+                        'bg-zinc-500'
+                      }`} />
                       <span className="font-medium text-white">
-                        {conn.server_name}
+                        {conn.server_command}
                       </span>
                     </div>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDisconnect(conn.server_id);
+                        handleDisconnect(conn.id);
                       }}
                       className="p-1 hover:bg-zinc-700 rounded"
                     >
@@ -208,7 +236,7 @@ export function MCPToolsBrowser() {
                     </button>
                   </div>
                   <p className="text-xs text-zinc-400">
-                    {conn.tools.length} tools available
+                    {conn.tools_count} tools available
                   </p>
                 </div>
               ))}
@@ -251,9 +279,9 @@ export function MCPToolsBrowser() {
         <div className="w-80 border-r border-zinc-700 bg-zinc-900/30 flex flex-col">
           <div className="p-4 border-b border-zinc-700">
             <h3 className="text-lg font-semibold text-white">Available Tools</h3>
-            {selectedConnection && (
+            {selectedServer && (
               <p className="text-sm text-zinc-400 mt-1">
-                {availableTools.length} tools from {selectedConnection.server_name}
+                {availableTools.length} tools from {connections.find(c => c.id === selectedServer)?.server_command || 'server'}
               </p>
             )}
           </div>
