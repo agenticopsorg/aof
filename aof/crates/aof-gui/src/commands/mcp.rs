@@ -32,6 +32,7 @@ pub enum McpConnectionStatus {
 
 /// MCP tool info for frontend
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpToolInfo {
     pub name: String,
     pub description: Option<String>,
