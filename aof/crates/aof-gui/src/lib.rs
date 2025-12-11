@@ -31,7 +31,7 @@ pub fn run() {
                 .build(),
         )
         .manage(AppState::new())
-        .setup(|app| {
+        .setup(|_app| {
             // DevTools can be opened manually with Cmd+Option+I (macOS) or F12 (Windows/Linux)
             // #[cfg(debug_assertions)]
             // {
@@ -40,6 +40,7 @@ pub fn run() {
             // }
 
             tracing::info!("AOF Desktop initialized successfully");
+            tracing::info!("SQLite database will be initialized on first use");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![

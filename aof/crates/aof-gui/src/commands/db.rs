@@ -36,25 +36,34 @@ impl From<DbMcpServer> for McpServerResponse {
     }
 }
 
+/// Helper to get database pool
+async fn get_db_pool(
+    app: &AppHandle,
+) -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
+    use tauri::Manager;
+
+    let instances = app.state::<tauri_plugin_sql::DbInstances>();
+    let pools = instances.0.read().await;
+
+    let pool = pools
+        .get("sqlite:aof.db")
+        .ok_or_else(|| {
+            "Database not initialized. Please restart the application.".to_string()
+        })?;
+
+    match pool {
+        tauri_plugin_sql::DbPool::Sqlite(db) => Ok(db.clone()),
+        _ => Err("Expected SQLite database".to_string()),
+    }
+}
+
 /// Save MCP server configuration to database
 #[tauri::command]
 pub async fn db_save_mcp_server(
     request: SaveMcpServerRequest,
     app: AppHandle,
 ) -> Result<McpServerResponse, String> {
-    use tauri::Manager;
-
-    let instances = app.state::<tauri_plugin_sql::DbInstances>();
-    let pools = instances.0.read().await;
-    let pool = pools
-        .get("sqlite:aof.db")
-        .ok_or_else(|| "Database not found".to_string())?;
-
-    let db = match pool {
-        tauri_plugin_sql::DbPool::Sqlite(db) => db,
-        _ => return Err("Expected SQLite database".to_string()),
-    };
-
+    let db = get_db_pool(&app).await?;
     let server = DbMcpServer::new(request.name, request.command, request.args);
 
     sqlx::query(
@@ -66,7 +75,7 @@ pub async fn db_save_mcp_server(
     .bind(&server.args)
     .bind(&server.created_at)
     .bind(&server.updated_at)
-    .execute(db)
+    .execute(&db)
     .await
     .map_err(|e| format!("Failed to save MCP server: {}", e))?;
 
@@ -76,21 +85,10 @@ pub async fn db_save_mcp_server(
 /// Load all MCP servers from database
 #[tauri::command]
 pub async fn db_load_mcp_servers(app: AppHandle) -> Result<Vec<McpServerResponse>, String> {
-    use tauri::Manager;
-
-    let instances = app.state::<tauri_plugin_sql::DbInstances>();
-    let pools = instances.0.read().await;
-    let pool = pools
-        .get("sqlite:aof.db")
-        .ok_or_else(|| "Database not found".to_string())?;
-
-    let db = match pool {
-        tauri_plugin_sql::DbPool::Sqlite(db) => db,
-        _ => return Err("Expected SQLite database".to_string()),
-    };
+    let db = get_db_pool(&app).await?;
 
     let rows = sqlx::query("SELECT * FROM mcp_servers ORDER BY created_at DESC")
-        .fetch_all(db)
+        .fetch_all(&db)
         .await
         .map_err(|e| format!("Failed to load MCP servers: {}", e))?;
 
@@ -116,22 +114,11 @@ pub async fn db_load_mcp_servers(app: AppHandle) -> Result<Vec<McpServerResponse
 /// Delete MCP server from database
 #[tauri::command]
 pub async fn db_delete_mcp_server(id: String, app: AppHandle) -> Result<(), String> {
-    use tauri::Manager;
-
-    let instances = app.state::<tauri_plugin_sql::DbInstances>();
-    let pools = instances.0.read().await;
-    let pool = pools
-        .get("sqlite:aof.db")
-        .ok_or_else(|| "Database not found".to_string())?;
-
-    let db = match pool {
-        tauri_plugin_sql::DbPool::Sqlite(db) => db,
-        _ => return Err("Expected SQLite database".to_string()),
-    };
+    let db = get_db_pool(&app).await?;
 
     sqlx::query("DELETE FROM mcp_servers WHERE id = ?")
         .bind(&id)
-        .execute(db)
+        .execute(&db)
         .await
         .map_err(|e| format!("Failed to delete MCP server: {}", e))?;
 
@@ -144,22 +131,11 @@ pub async fn db_get_mcp_server(
     id: String,
     app: AppHandle,
 ) -> Result<Option<McpServerResponse>, String> {
-    use tauri::Manager;
-
-    let instances = app.state::<tauri_plugin_sql::DbInstances>();
-    let pools = instances.0.read().await;
-    let pool = pools
-        .get("sqlite:aof.db")
-        .ok_or_else(|| "Database not found".to_string())?;
-
-    let db = match pool {
-        tauri_plugin_sql::DbPool::Sqlite(db) => db,
-        _ => return Err("Expected SQLite database".to_string()),
-    };
+    let db = get_db_pool(&app).await?;
 
     let row = sqlx::query("SELECT * FROM mcp_servers WHERE id = ?")
         .bind(&id)
-        .fetch_optional(db)
+        .fetch_optional(&db)
         .await
         .map_err(|e| format!("Failed to get MCP server: {}", e))?;
 
