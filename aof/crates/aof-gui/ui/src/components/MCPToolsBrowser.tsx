@@ -426,6 +426,9 @@ export function MCPToolsBrowser() {
                   value={newServer.name}
                   onChange={(e) => setNewServer({ ...newServer, name: e.target.value })}
                   placeholder="My MCP Server"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  autoComplete="off"
                   className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60"
                 />
               </div>
@@ -461,8 +464,12 @@ export function MCPToolsBrowser() {
                       onChange={(e) =>
                         setNewServer({ ...newServer, command: e.target.value })
                       }
-                      placeholder="npx @modelcontextprotocol/server-example"
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                      placeholder="kubectl-ai"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60 font-mono"
                     />
                   </div>
                   <div>
@@ -475,8 +482,12 @@ export function MCPToolsBrowser() {
                       onChange={(e) =>
                         setNewServer({ ...newServer, args: e.target.value })
                       }
-                      placeholder="--port 3000"
-                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                      placeholder="--mcp-server"
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60 font-mono"
                     />
                   </div>
                 </>
