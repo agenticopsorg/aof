@@ -23,13 +23,15 @@ pub fn run() {
     tracing::info!("AOF Core v{}", aof_core::VERSION);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .manage(AppState::new())
         .setup(|app| {
-            #[cfg(debug_assertions)]
-            {
-                let window = app.get_webview_window("main").unwrap();
-                window.open_devtools();
-            }
+            // DevTools can be opened manually with Cmd+Option+I (macOS) or F12 (Windows/Linux)
+            // #[cfg(debug_assertions)]
+            // {
+            //     let window = app.get_webview_window("main").unwrap();
+            //     window.open_devtools();
+            // }
 
             tracing::info!("AOF Desktop initialized successfully");
             Ok(())

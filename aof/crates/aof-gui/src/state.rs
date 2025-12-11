@@ -7,7 +7,7 @@ use tokio::sync::RwLock;
 use aof_runtime::RuntimeOrchestrator;
 use crate::commands::agent::AgentRuntime;
 use crate::commands::config::ConfigMetadata;
-use crate::commands::mcp::McpConnection;
+use crate::commands::mcp::{McpConnection, McpServerConfig};
 
 /// Main application state
 #[derive(Clone)]
@@ -20,6 +20,9 @@ pub struct AppState {
 
     /// Active MCP connections
     pub mcp_connections: Arc<RwLock<HashMap<String, McpConnection>>>,
+
+    /// Saved MCP server configurations
+    pub mcp_server_configs: Arc<RwLock<HashMap<String, McpServerConfig>>>,
 
     /// Application settings
     pub settings: Arc<RwLock<AppSettings>>,
@@ -34,6 +37,7 @@ impl AppState {
             agents: Arc::new(RwLock::new(HashMap::new())),
             configs: Arc::new(RwLock::new(HashMap::new())),
             mcp_connections: Arc::new(RwLock::new(HashMap::new())),
+            mcp_server_configs: Arc::new(RwLock::new(HashMap::new())),
             settings: Arc::new(RwLock::new(AppSettings::default())),
             orchestrator: Arc::new(RuntimeOrchestrator::with_max_concurrent(5)),
         }
@@ -68,7 +72,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            default_model: "claude-3-5-sonnet-20241022".to_string(),
+            default_model: "gemini-2.0-flash".to_string(),
             default_temperature: 0.7,
             auto_save: true,
             theme: "dark".to_string(),

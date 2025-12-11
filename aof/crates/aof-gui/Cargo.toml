@@ -47,6 +47,7 @@ aof-mcp = { path = "../aof-mcp" }
 aof-llm = { path = "../aof-llm" }
 aof-memory = { path = "../aof-memory" }
 aof-runtime = { path = "../aof-runtime" }
+tauri-plugin-store = "2.4.1"
 
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }

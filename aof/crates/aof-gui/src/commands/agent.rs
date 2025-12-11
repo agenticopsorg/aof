@@ -110,9 +110,29 @@ pub async fn agent_run(
     let agent_id = Uuid::new_v4().to_string();
     let agent_name = config.name.clone();
 
-    // Validate API key from environment
-    let api_key = std::env::var("ANTHROPIC_API_KEY")
-        .map_err(|_| "ANTHROPIC_API_KEY environment variable not set. Please configure your API key.".to_string())?;
+    // Determine provider from model name and get appropriate API key
+    let (provider, api_key_var) = if config.model.starts_with("gemini") || config.model.starts_with("google/") {
+        ("google", "GOOGLE_API_KEY")
+    } else if config.model.starts_with("claude") || config.model.starts_with("anthropic") {
+        ("anthropic", "ANTHROPIC_API_KEY")
+    } else if config.model.starts_with("gpt") || config.model.starts_with("openai") {
+        ("openai", "OPENAI_API_KEY")
+    } else if config.model.starts_with("llama") || config.model.starts_with("mistral") || config.model.starts_with("ollama") {
+        ("ollama", "OLLAMA_HOST") // Ollama doesn't need API key, just host URL
+    } else if config.model.contains("groq") {
+        ("groq", "GROQ_API_KEY")
+    } else {
+        // Default to trying Google for unknown models
+        ("google", "GOOGLE_API_KEY")
+    };
+
+    // Get API key from environment (skip for ollama)
+    let api_key = if provider == "ollama" {
+        std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string())
+    } else {
+        std::env::var(api_key_var)
+            .map_err(|_| format!("{} environment variable not set. Please configure your API key for {} provider.", api_key_var, provider))?
+    };
 
     // Create agent runtime entry
     let runtime = AgentRuntime {

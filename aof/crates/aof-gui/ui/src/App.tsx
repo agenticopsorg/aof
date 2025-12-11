@@ -4,12 +4,16 @@ import { listen, UnlistenFn } from '@tauri-apps/api/event';
 import {
   Terminal, Cpu, Network, Settings as SettingsIcon, Play, Square,
   FileCode, Check, AlertCircle, Loader2, Trash2,
-  Plus, RefreshCw
+  Plus, RefreshCw, Brain, MessageCircle, BarChart3
 } from 'lucide-react';
 import { Toaster } from 'sonner';
 import { Settings } from './components/Settings';
 import { StreamingOutput } from './components/StreamingOutput';
 import { AgentTemplates } from './components/AgentTemplates';
+import { MCPToolsBrowser } from './components/MCPToolsBrowser';
+import { MemoryViewer } from './components/MemoryViewer';
+import { PlatformIntegrations } from './components/PlatformIntegrations';
+import { SystemMonitoring } from './components/SystemMonitoring';
 import { toast, invokeWithToast } from './lib/toast';
 import './App.css';
 
@@ -52,7 +56,7 @@ interface ValidationResult {
 }
 
 // Tab type
-type TabType = 'agents' | 'config' | 'templates' | 'mcp' | 'settings';
+type TabType = 'agents' | 'config' | 'templates' | 'mcp' | 'memory' | 'integrations' | 'monitoring' | 'settings';
 
 function App() {
   // App state
@@ -239,6 +243,9 @@ function App() {
               { id: 'config' as TabType, label: 'Configuration', icon: FileCode },
               { id: 'templates' as TabType, label: 'Templates', icon: FileCode },
               { id: 'mcp' as TabType, label: 'MCP Tools', icon: Network },
+              { id: 'memory' as TabType, label: 'Memory', icon: Brain },
+              { id: 'integrations' as TabType, label: 'Integrations', icon: MessageCircle },
+              { id: 'monitoring' as TabType, label: 'Monitoring', icon: BarChart3 },
               { id: 'settings' as TabType, label: 'Settings', icon: SettingsIcon },
             ].map(({ id, label, icon: Icon }) => (
               <button
@@ -478,18 +485,29 @@ function App() {
 
         {/* MCP Tools Tab */}
         {activeTab === 'mcp' && (
-          <div className="bg-zinc-800/50 backdrop-blur rounded-lg border border-zinc-700 p-8">
-            <div className="text-center">
-              <Network className="w-16 h-16 text-zinc-600 mx-auto mb-4" />
-              <h2 className="text-xl font-semibold text-white mb-2">MCP Tools Browser</h2>
-              <p className="text-zinc-400 mb-6">
-                Connect to Model Context Protocol servers to browse and test available tools.
-              </p>
-              <button className="flex items-center space-x-2 px-6 py-3 bg-sky-400/60 hover:bg-sky-400/80 text-white font-medium rounded-lg transition-colors mx-auto">
-                <Plus className="w-4 h-4" />
-                <span>Connect MCP Server</span>
-              </button>
-            </div>
+          <div className="h-[calc(100vh-12rem)]">
+            <MCPToolsBrowser />
+          </div>
+        )}
+
+        {/* Memory Tab */}
+        {activeTab === 'memory' && (
+          <div className="h-[calc(100vh-12rem)]">
+            <MemoryViewer />
+          </div>
+        )}
+
+        {/* Integrations Tab */}
+        {activeTab === 'integrations' && (
+          <div className="h-[calc(100vh-12rem)]">
+            <PlatformIntegrations />
+          </div>
+        )}
+
+        {/* Monitoring Tab */}
+        {activeTab === 'monitoring' && (
+          <div className="h-[calc(100vh-12rem)]">
+            <SystemMonitoring />
           </div>
         )}
 

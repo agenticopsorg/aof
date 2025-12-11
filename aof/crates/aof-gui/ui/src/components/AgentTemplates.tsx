@@ -23,7 +23,7 @@ kind: Agent
 metadata:
   name: k8s-helper
 spec:
-  model: anthropic:claude-3-5-sonnet-20241022
+  model: gemini-2.0-flash
   instructions: |
     You are a helpful Kubernetes expert. Help users with kubectl commands,
     troubleshoot pod issues, and explain K8s concepts clearly.
@@ -45,7 +45,7 @@ kind: Agent
 metadata:
   name: code-reviewer
 spec:
-  model: anthropic:claude-3-5-sonnet-20241022
+  model: gemini-2.0-flash
   instructions: |
     You are an experienced code reviewer. Analyze code for:
     - Code quality and best practices
@@ -71,7 +71,7 @@ kind: Agent
 metadata:
   name: slack-support-bot
 spec:
-  model: openai:gpt-4o-mini
+  model: gemini-2.0-flash
   instructions: |
     You are a helpful support bot. Answer common questions and provide
     guidance. If you cannot help, suggest contacting a human.
@@ -97,7 +97,7 @@ kind: Agent
 metadata:
   name: incident-responder
 spec:
-  model: anthropic:claude-3-5-sonnet-20241022
+  model: gemini-2.0-flash
   instructions: |
     You are an SRE expert. When an incident occurs:
     1. Diagnose the root cause
@@ -128,7 +128,7 @@ kind: Agent
 metadata:
   name: doc-writer
 spec:
-  model: openai:gpt-4o
+  model: gemini-2.0-flash
   instructions: |
     You are a technical writer. Generate clear, comprehensive documentation
     including:
@@ -150,7 +150,7 @@ kind: Agent
 metadata:
   name: log-analyzer
 spec:
-  model: anthropic:claude-3-5-sonnet-20241022
+  model: gemini-2.0-flash
   instructions: |
     You are a log analysis expert. Analyze logs to:
     - Identify error patterns

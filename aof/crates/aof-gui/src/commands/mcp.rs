@@ -32,6 +32,7 @@ pub enum McpConnectionStatus {
 
 /// MCP tool info for frontend
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct McpToolInfo {
     pub name: String,
     pub description: Option<String>,
@@ -63,6 +64,16 @@ pub struct McpToolCallResponse {
     pub result: serde_json::Value,
     pub error: Option<String>,
     pub execution_time_ms: u64,
+}
+
+/// Saved MCP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub created_at: String,
 }
 
 /// Stored MCP connection
