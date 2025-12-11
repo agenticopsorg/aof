@@ -96,16 +96,34 @@ impl McpTransport for StdioTransport {
             .await
             .map_err(|e| AofError::mcp(format!("Failed to write newline: {}", e)))?;
 
-        // Read response
-        let mut response_line = String::new();
-        stdout
-            .read_line(&mut response_line)
-            .await
-            .map_err(|e| AofError::mcp(format!("Failed to read response: {}", e)))?;
+        // Read response, skipping empty lines and non-JSON output
+        let response = loop {
+            let mut response_line = String::new();
+            let bytes_read = stdout
+                .read_line(&mut response_line)
+                .await
+                .map_err(|e| AofError::mcp(format!("Failed to read response: {}", e)))?;
 
-        debug!("Received MCP response: {}", response_line);
+            if bytes_read == 0 {
+                return Err(AofError::mcp("MCP server closed connection".to_string()));
+            }
 
-        let response: McpResponse = serde_json::from_str(&response_line)?;
+            let trimmed = response_line.trim();
+            if trimmed.is_empty() {
+                continue; // Skip empty lines
+            }
+
+            debug!("Received MCP response: {}", trimmed);
+
+            // Try to parse as JSON
+            match serde_json::from_str::<McpResponse>(trimmed) {
+                Ok(response) => break response,
+                Err(e) => {
+                    debug!("Skipping non-JSON line: {} (error: {})", trimmed, e);
+                    continue; // Skip non-JSON lines (likely debug output)
+                }
+            }
+        };
 
         if let Some(error) = &response.error {
             return Err(AofError::mcp(format!(
