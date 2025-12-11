@@ -3,6 +3,7 @@
 
 pub mod agent;
 pub mod config;
+pub mod db;
 pub mod mcp;
 pub mod settings;
 
@@ -11,6 +12,7 @@ use serde::{Deserialize, Serialize};
 // Re-export all commands for easy registration
 pub use agent::*;
 pub use config::*;
+pub use db::*;
 pub use mcp::*;
 pub use settings::*;
 

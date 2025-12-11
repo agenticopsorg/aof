@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import { Store } from '@tauri-apps/plugin-store';
 import {
   Server, Plug, PlayCircle, AlertCircle,
   Loader2, Plus, X
@@ -49,16 +48,25 @@ interface McpConnectionInfo {
 }
 
 // MCP Server Configuration Persistence
-// Tauri Store saves to platform-specific app data directory:
-// - macOS: ~/Library/Application Support/io.aof.desktop/mcp-servers.json
-// - Linux: ~/.config/io.aof.desktop/mcp-servers.json
-// - Windows: %APPDATA%\io.aof.desktop\mcp-servers.json
+// Using SQLite via tauri-plugin-sql for reliable persistence:
+// - Database: aof.db in platform-specific app data directory
+// - Relational storage with proper schema and migrations
+// - Query capabilities for filtering and searching
+// - Transaction support for data integrity
 //
-// This ensures configs persist across app restarts and follows platform best practices.
-const mcpStore = new Store('mcp-servers.json');
+// This ensures configs persist reliably across app restarts.
+
+interface DbMcpServer {
+  id: string;
+  name: string;
+  command: string;
+  args: string[];
+  created_at: string;
+}
 
 export function MCPToolsBrowser() {
   const [servers, setServers] = useState<McpServer[]>([]);
+  const [dbReady, setDbReady] = useState(false);
   const [connections, setConnections] = useState<McpConnectionInfo[]>([]);
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
   const [selectedTool, setSelectedTool] = useState<McpTool | null>(null);
@@ -77,29 +85,29 @@ export function MCPToolsBrowser() {
 
   useEffect(() => {
     loadConnections();
-    loadSavedServers();
+    loadServersFromDb();
   }, []);
 
-  const loadSavedServers = async () => {
+  const loadServersFromDb = async () => {
     try {
-      const saved = await mcpStore.get<McpServer[]>('servers');
-      if (saved && Array.isArray(saved)) {
-        console.log('Loaded saved MCP servers:', saved.length);
-        setServers(saved);
-      }
-    } catch (error) {
-      console.error('Failed to load saved servers:', error);
-    }
-  };
+      const dbServers = await invoke<DbMcpServer[]>('db_load_mcp_servers');
+      console.log('Loaded MCP servers from database:', dbServers.length);
 
-  const saveServers = async (newServers: McpServer[]) => {
-    try {
-      await mcpStore.set('servers', newServers);
-      await mcpStore.save();
-      console.log('Saved MCP servers:', newServers.length);
+      // Convert database format to UI format
+      const uiServers: McpServer[] = dbServers.map(db => ({
+        id: db.id,
+        name: db.name,
+        transport: 'stdio' as const,
+        command: db.command,
+        args: db.args,
+        status: 'disconnected' as const,
+      }));
+
+      setServers(uiServers);
+      setDbReady(true);
     } catch (error) {
-      console.error('Failed to save servers:', error);
-      toast.error('Failed to save server configuration');
+      console.error('Failed to load servers from database:', error);
+      setDbReady(true);
     }
   };
 
@@ -217,35 +225,53 @@ export function MCPToolsBrowser() {
   };
 
   const handleAddServer = async () => {
-    const server: McpServer = {
-      id: `server-${Date.now()}`,
-      name: newServer.name,
-      transport: newServer.transport,
-      command: newServer.transport === 'stdio' ? newServer.command : undefined,
-      args: newServer.transport === 'stdio' && newServer.args
-        ? newServer.args.split(' ')
-        : undefined,
-      url: newServer.transport === 'http' ? newServer.url : undefined,
-      status: 'disconnected',
-    };
+    try {
+      const args = newServer.transport === 'stdio' && newServer.args
+        ? newServer.args.split(' ').filter(a => a.trim())
+        : [];
 
-    const updatedServers = [...servers, server];
-    setServers(updatedServers);
-    await saveServers(updatedServers);
-    setShowAddServer(false);
-    setNewServer({
-      name: '',
-      transport: 'stdio',
-      command: '',
-      args: '',
-      url: '',
-    });
+      const result = await invoke<DbMcpServer>('db_save_mcp_server', {
+        request: {
+          name: newServer.name,
+          command: newServer.command,
+          args,
+        }
+      });
+
+      const server: McpServer = {
+        id: result.id,
+        name: result.name,
+        transport: 'stdio',
+        command: result.command,
+        args: result.args,
+        status: 'disconnected',
+      };
+
+      setServers([...servers, server]);
+      setShowAddServer(false);
+      setNewServer({
+        name: '',
+        transport: 'stdio',
+        command: '',
+        args: '',
+        url: '',
+      });
+      toast.success('MCP server saved');
+    } catch (error) {
+      console.error('Failed to add server:', error);
+      toast.error('Failed to save MCP server');
+    }
   };
 
   const handleRemoveServer = async (serverId: string) => {
-    const updatedServers = servers.filter(s => s.id !== serverId);
-    setServers(updatedServers);
-    await saveServers(updatedServers);
+    try {
+      await invoke('db_delete_mcp_server', { id: serverId });
+      setServers(servers.filter(s => s.id !== serverId));
+      toast.success('MCP server removed');
+    } catch (error) {
+      console.error('Failed to remove server:', error);
+      toast.error('Failed to remove MCP server');
+    }
   };
 
 

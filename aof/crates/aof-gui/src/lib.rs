@@ -2,6 +2,7 @@
 // Integrates aof-core, aof-mcp, aof-llm, aof-memory with Tauri
 
 pub mod commands;
+pub mod db;
 pub mod state;
 
 use state::AppState;
@@ -24,6 +25,11 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
+        .plugin(
+            tauri_plugin_sql::Builder::default()
+                .add_migrations("sqlite:aof.db", db::get_migrations())
+                .build(),
+        )
         .manage(AppState::new())
         .setup(|app| {
             // DevTools can be opened manually with Cmd+Option+I (macOS) or F12 (Windows/Linux)
@@ -61,6 +67,11 @@ pub fn run() {
             commands::mcp_list_tools,
             commands::mcp_call_tool,
             commands::mcp_get_tool,
+            // Database commands
+            commands::db_save_mcp_server,
+            commands::db_load_mcp_servers,
+            commands::db_delete_mcp_server,
+            commands::db_get_mcp_server,
             // Settings commands
             commands::settings_get,
             commands::settings_update,
