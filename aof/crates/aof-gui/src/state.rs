@@ -1,6 +1,7 @@
 // Application State - Shared state managed by Tauri
 
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 
@@ -29,6 +30,9 @@ pub struct AppState {
 
     /// Runtime orchestrator for task execution
     pub orchestrator: Arc<RuntimeOrchestrator>,
+
+    /// SQLite database pool
+    pub db: Arc<RwLock<Option<sqlx::SqlitePool>>>,
 }
 
 impl AppState {
@@ -40,7 +44,61 @@ impl AppState {
             mcp_server_configs: Arc::new(RwLock::new(HashMap::new())),
             settings: Arc::new(RwLock::new(AppSettings::default())),
             orchestrator: Arc::new(RuntimeOrchestrator::with_max_concurrent(5)),
+            db: Arc::new(RwLock::new(None)),
         }
+    }
+
+    /// Initialize the database pool
+    pub async fn init_db(&self, db_path: PathBuf) -> Result<(), String> {
+        use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
+
+        tracing::info!("Initializing database at: {:?}", db_path);
+
+        // Create parent directory if needed
+        if let Some(parent) = db_path.parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("Failed to create database directory: {}", e))?;
+        }
+
+        // Use SqliteConnectOptions for proper path handling
+        let options = SqliteConnectOptions::new()
+            .filename(&db_path)
+            .create_if_missing(true);
+
+        let pool = SqlitePoolOptions::new()
+            .max_connections(5)
+            .connect_with(options)
+            .await
+            .map_err(|e| format!("Failed to create database pool: {}", e))?;
+
+        tracing::info!("✓ Database pool created successfully");
+
+        // Run migrations
+        let migrations = crate::db::get_migrations();
+        for migration in migrations {
+            tracing::info!("Running migration v{}: {}", migration.version, migration.description);
+            if let Err(e) = sqlx::query(&migration.sql).execute(&pool).await {
+                // Ignore "already exists" errors for IF NOT EXISTS statements
+                if !e.to_string().contains("already exists") {
+                    tracing::warn!("Migration warning: {}", e);
+                }
+            }
+        }
+
+        tracing::info!("✓ Migrations completed");
+
+        // Store the pool
+        let mut db_guard = self.db.write().await;
+        *db_guard = Some(pool);
+
+        tracing::info!("✓ Database ready");
+        Ok(())
+    }
+
+    /// Get the database pool
+    pub async fn get_db(&self) -> Result<sqlx::SqlitePool, String> {
+        let db_guard = self.db.read().await;
+        db_guard.clone().ok_or_else(|| "Database not initialized".to_string())
     }
 }
 

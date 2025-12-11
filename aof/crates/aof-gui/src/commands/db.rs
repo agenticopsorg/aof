@@ -1,10 +1,10 @@
 // Database Commands - Tauri handlers for database persistence operations
 
 use crate::db::DbMcpServer;
+use crate::state::AppState;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
-use std::ops::Deref;
-use tauri::AppHandle;
+use tauri::State;
 
 /// MCP server save request
 #[derive(Debug, Deserialize)]
@@ -36,34 +36,15 @@ impl From<DbMcpServer> for McpServerResponse {
     }
 }
 
-/// Helper to get database pool
-async fn get_db_pool(
-    app: &AppHandle,
-) -> Result<sqlx::Pool<sqlx::Sqlite>, String> {
-    use tauri::Manager;
-
-    let instances = app.state::<tauri_plugin_sql::DbInstances>();
-    let pools = instances.0.read().await;
-
-    let pool = pools
-        .get("sqlite:aof.db")
-        .ok_or_else(|| {
-            "Database not initialized. Please restart the application.".to_string()
-        })?;
-
-    match pool {
-        tauri_plugin_sql::DbPool::Sqlite(db) => Ok(db.clone()),
-        _ => Err("Expected SQLite database".to_string()),
-    }
-}
-
 /// Save MCP server configuration to database
 #[tauri::command]
 pub async fn db_save_mcp_server(
     request: SaveMcpServerRequest,
-    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<McpServerResponse, String> {
-    let db = get_db_pool(&app).await?;
+    tracing::info!("Saving MCP server: {} ({})", request.name, request.command);
+
+    let db = state.get_db().await?;
     let server = DbMcpServer::new(request.name, request.command, request.args);
 
     sqlx::query(
@@ -79,13 +60,14 @@ pub async fn db_save_mcp_server(
     .await
     .map_err(|e| format!("Failed to save MCP server: {}", e))?;
 
+    tracing::info!("✓ Saved MCP server: {}", server.name);
     Ok(server.into())
 }
 
 /// Load all MCP servers from database
 #[tauri::command]
-pub async fn db_load_mcp_servers(app: AppHandle) -> Result<Vec<McpServerResponse>, String> {
-    let db = get_db_pool(&app).await?;
+pub async fn db_load_mcp_servers(state: State<'_, AppState>) -> Result<Vec<McpServerResponse>, String> {
+    let db = state.get_db().await?;
 
     let rows = sqlx::query("SELECT * FROM mcp_servers ORDER BY created_at DESC")
         .fetch_all(&db)
@@ -108,13 +90,14 @@ pub async fn db_load_mcp_servers(app: AppHandle) -> Result<Vec<McpServerResponse
         })
         .collect();
 
+    tracing::debug!("Loaded {} MCP servers from database", servers.len());
     Ok(servers)
 }
 
 /// Delete MCP server from database
 #[tauri::command]
-pub async fn db_delete_mcp_server(id: String, app: AppHandle) -> Result<(), String> {
-    let db = get_db_pool(&app).await?;
+pub async fn db_delete_mcp_server(id: String, state: State<'_, AppState>) -> Result<(), String> {
+    let db = state.get_db().await?;
 
     sqlx::query("DELETE FROM mcp_servers WHERE id = ?")
         .bind(&id)
@@ -122,6 +105,7 @@ pub async fn db_delete_mcp_server(id: String, app: AppHandle) -> Result<(), Stri
         .await
         .map_err(|e| format!("Failed to delete MCP server: {}", e))?;
 
+    tracing::info!("✓ Deleted MCP server: {}", id);
     Ok(())
 }
 
@@ -129,9 +113,9 @@ pub async fn db_delete_mcp_server(id: String, app: AppHandle) -> Result<(), Stri
 #[tauri::command]
 pub async fn db_get_mcp_server(
     id: String,
-    app: AppHandle,
+    state: State<'_, AppState>,
 ) -> Result<Option<McpServerResponse>, String> {
-    let db = get_db_pool(&app).await?;
+    let db = state.get_db().await?;
 
     let row = sqlx::query("SELECT * FROM mcp_servers WHERE id = ?")
         .bind(&id)

@@ -23,24 +23,36 @@ pub fn run() {
     tracing::info!("Starting AOF Desktop v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("AOF Core v{}", aof_core::VERSION);
 
+    // Create app state
+    let app_state = AppState::new();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
-        .plugin(
-            tauri_plugin_sql::Builder::default()
-                .add_migrations("sqlite:aof.db", db::get_migrations())
-                .build(),
-        )
-        .manage(AppState::new())
-        .setup(|_app| {
-            // DevTools can be opened manually with Cmd+Option+I (macOS) or F12 (Windows/Linux)
-            // #[cfg(debug_assertions)]
-            // {
-            //     let window = app.get_webview_window("main").unwrap();
-            //     window.open_devtools();
-            // }
+        .manage(app_state)
+        .setup(|app| {
+            let app_handle = app.handle().clone();
+
+            // Get the app data directory
+            let db_path = match app_handle.path().app_data_dir() {
+                Ok(dir) => dir.join("aof.db"),
+                Err(e) => {
+                    tracing::error!("Failed to get app data directory: {}", e);
+                    // Fallback to current directory
+                    std::path::PathBuf::from("aof.db")
+                }
+            };
+
+            tracing::info!("Database path: {:?}", db_path);
+
+            // Initialize database - block until complete
+            let state = app_handle.state::<AppState>();
+            tauri::async_runtime::block_on(async {
+                if let Err(e) = state.init_db(db_path).await {
+                    tracing::error!("Database initialization failed: {}", e);
+                }
+            });
 
             tracing::info!("AOF Desktop initialized successfully");
-            tracing::info!("SQLite database will be initialized on first use");
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
