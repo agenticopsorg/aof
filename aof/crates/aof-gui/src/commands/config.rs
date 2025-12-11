@@ -107,14 +107,6 @@ pub async fn config_validate(yaml_content: String) -> Result<ValidationResult, S
                 warnings.push("No tools configured - agent will only use LLM responses without external tool capabilities.".to_string());
             }
 
-            // Validate model name
-            if !cfg.model.starts_with("claude-") {
-                warnings.push(format!(
-                    "Model '{}' doesn't appear to be a Claude model. Currently only Claude models are supported.",
-                    cfg.model
-                ));
-            }
-
             // Check temperature bounds
             if cfg.temperature > 1.0 {
                 warnings.push(format!(
