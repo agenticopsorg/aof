@@ -48,7 +48,13 @@ interface McpConnectionInfo {
   connected_at?: string;
 }
 
-// Create store instance outside component to persist across renders
+// MCP Server Configuration Persistence
+// Tauri Store saves to platform-specific app data directory:
+// - macOS: ~/Library/Application Support/io.aof.desktop/mcp-servers.json
+// - Linux: ~/.config/io.aof.desktop/mcp-servers.json
+// - Windows: %APPDATA%\io.aof.desktop\mcp-servers.json
+//
+// This ensures configs persist across app restarts and follows platform best practices.
 const mcpStore = new Store('mcp-servers.json');
 
 export function MCPToolsBrowser() {
@@ -177,7 +183,26 @@ export function MCPToolsBrowser() {
       });
 
       if (response.success) {
-        setToolResult(JSON.stringify(response.result, null, 2));
+        // Extract human-readable output from MCP response
+        let output = '';
+
+        if (response.result?.content && Array.isArray(response.result.content)) {
+          // MCP format with content array
+          output = response.result.content
+            .map((item: any) => item.text || JSON.stringify(item))
+            .join('\n');
+        } else if (response.result?.text) {
+          // Direct text field
+          output = response.result.text;
+        } else if (typeof response.result === 'string') {
+          // Plain string response
+          output = response.result;
+        } else {
+          // Fallback to formatted JSON
+          output = JSON.stringify(response.result, null, 2);
+        }
+
+        setToolResult(output);
         toast.success('Tool executed successfully');
       } else {
         setToolResult(`Error: ${response.error}`);
