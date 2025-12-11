@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Server, Plug, PlayCircle, Copy, Check, AlertCircle,
-  Loader2, Plus, X, ChevronDown, ChevronRight
+  Server, Plug, PlayCircle, AlertCircle,
+  Loader2, Plus, X
 } from 'lucide-react';
 import { toast, invokeWithToast } from '../lib/toast';
 
@@ -18,8 +18,21 @@ interface McpServer {
 
 interface McpTool {
   name: string;
-  description: string;
-  parameters: Record<string, {
+  description?: string;
+  inputSchema?: {
+    type?: string;
+    properties?: Record<string, {
+      type: string;
+      description?: string;
+      enum?: string[];
+      items?: any;
+      [key: string]: any;
+    }>;
+    required?: string[];
+    [key: string]: any;
+  };
+  // Legacy support for simplified format
+  parameters?: Record<string, {
     type: string;
     description?: string;
     required?: boolean;
@@ -313,9 +326,11 @@ export function MCPToolsBrowser() {
                   }`}
                 >
                   <div className="font-medium text-white mb-1">{tool.name}</div>
-                  <p className="text-xs text-zinc-400 line-clamp-2">
-                    {tool.description}
-                  </p>
+                  {tool.description && (
+                    <p className="text-xs text-zinc-400 line-clamp-2">
+                      {tool.description}
+                    </p>
+                  )}
                 </div>
               ))
             )}
@@ -338,34 +353,87 @@ export function MCPToolsBrowser() {
                 <h2 className="text-2xl font-bold text-white mb-2">
                   {selectedTool.name}
                 </h2>
-                <p className="text-zinc-400 mb-4">{selectedTool.description}</p>
+                {selectedTool.description && (
+                  <p className="text-zinc-400 mb-4">{selectedTool.description}</p>
+                )}
 
                 {/* Parameters */}
                 <div className="space-y-3">
-                  {Object.entries(selectedTool.parameters).map(([name, param]) => (
-                    <div key={name}>
-                      <label className="block text-sm font-medium text-zinc-300 mb-2">
-                        {name}
-                        {param.required && (
-                          <span className="text-red-400 ml-1">*</span>
-                        )}
-                      </label>
-                      {param.description && (
-                        <p className="text-xs text-zinc-500 mb-2">
-                          {param.description}
-                        </p>
-                      )}
-                      <input
-                        type="text"
-                        value={toolInput[name] || ''}
-                        onChange={(e) =>
-                          setToolInput({ ...toolInput, [name]: e.target.value })
-                        }
-                        placeholder={`Enter ${name}`}
-                        className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
-                      />
-                    </div>
-                  ))}
+                  {(() => {
+                    // Extract parameters from inputSchema or legacy parameters field
+                    const properties = selectedTool.inputSchema?.properties || selectedTool.parameters || {};
+                    const requiredFields = selectedTool.inputSchema?.required || [];
+
+                    return Object.entries(properties).map(([name, param]) => {
+                      const isRequired = requiredFields.includes(name) || (param as any).required;
+
+                      return (
+                        <div key={name}>
+                          <label className="block text-sm font-medium text-zinc-300 mb-2">
+                            {name}
+                            {isRequired && (
+                              <span className="text-red-400 ml-1">*</span>
+                            )}
+                          </label>
+                          {param.description && (
+                            <p className="text-xs text-zinc-500 mb-2">
+                              {param.description}
+                            </p>
+                          )}
+                          {param.enum ? (
+                            <select
+                              value={toolInput[name] || ''}
+                              onChange={(e) =>
+                                setToolInput({ ...toolInput, [name]: e.target.value })
+                              }
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                            >
+                              <option value="">Select {name}</option>
+                              {param.enum.map((value: string) => (
+                                <option key={value} value={value}>{value}</option>
+                              ))}
+                            </select>
+                          ) : param.type === 'boolean' ? (
+                            <select
+                              value={toolInput[name] || ''}
+                              onChange={(e) =>
+                                setToolInput({ ...toolInput, [name]: e.target.value })
+                              }
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                            >
+                              <option value="">Select value</option>
+                              <option value="true">true</option>
+                              <option value="false">false</option>
+                            </select>
+                          ) : param.type === 'number' || param.type === 'integer' ? (
+                            <input
+                              type="number"
+                              value={toolInput[name] || ''}
+                              onChange={(e) =>
+                                setToolInput({ ...toolInput, [name]: e.target.value })
+                              }
+                              placeholder={`Enter ${name}`}
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-400/60"
+                            />
+                          ) : (
+                            <input
+                              type="text"
+                              value={toolInput[name] || ''}
+                              onChange={(e) =>
+                                setToolInput({ ...toolInput, [name]: e.target.value })
+                              }
+                              placeholder={`Enter ${name}`}
+                              autoCapitalize="off"
+                              autoCorrect="off"
+                              autoComplete="off"
+                              spellCheck={false}
+                              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder-zinc-500 focus:outline-none focus:ring-2 focus:ring-sky-400/60 font-mono"
+                            />
+                          )}
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
 
                 {/* Execute Button */}
