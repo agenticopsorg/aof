@@ -23,6 +23,7 @@ pub fn run() {
     tracing::info!("AOF Core v{}", aof_core::VERSION);
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_store::Builder::new().build())
         .manage(AppState::new())
         .setup(|app| {
             #[cfg(debug_assertions)]

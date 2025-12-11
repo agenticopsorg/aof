@@ -65,6 +65,16 @@ pub struct McpToolCallResponse {
     pub execution_time_ms: u64,
 }
 
+/// Saved MCP server configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct McpServerConfig {
+    pub id: String,
+    pub name: String,
+    pub command: String,
+    pub args: Vec<String>,
+    pub created_at: String,
+}
+
 /// Stored MCP connection
 pub struct McpConnection {
     pub id: String,
