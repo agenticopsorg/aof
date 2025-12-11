@@ -35,6 +35,12 @@ impl Default for AppSettings {
             log_level: "info".to_string(),
             providers: vec![
                 ProviderConfig {
+                    provider: "google".to_string(),
+                    api_key: std::env::var("GOOGLE_API_KEY").ok(),
+                    base_url: None,
+                    default_model: "gemini-2.0-flash".to_string(),
+                },
+                ProviderConfig {
                     provider: "anthropic".to_string(),
                     api_key: std::env::var("ANTHROPIC_API_KEY").ok(),
                     base_url: None,
@@ -109,6 +115,13 @@ pub async fn provider_test_connection(
     tracing::info!("Testing connection for provider: {}", provider);
 
     match provider.as_str() {
+        "google" => {
+            // TODO: Actually test the connection
+            if api_key.is_empty() {
+                return Err("API key is required for Google".to_string());
+            }
+            Ok("Successfully configured Google API".to_string())
+        }
         "anthropic" => {
             // TODO: Actually test the connection once provider is refactored
             if api_key.is_empty() {
@@ -143,6 +156,12 @@ pub async fn provider_test_connection(
 #[tauri::command]
 pub async fn provider_list_models(provider: String) -> Result<Vec<String>, String> {
     match provider.as_str() {
+        "google" => Ok(vec![
+            "gemini-2.0-flash".to_string(),
+            "gemini-1.5-pro".to_string(),
+            "gemini-1.5-flash".to_string(),
+            "gemini-1.0-pro".to_string(),
+        ]),
         "anthropic" => Ok(vec![
             "claude-3-5-sonnet-20241022".to_string(),
             "claude-3-5-haiku-20241022".to_string(),

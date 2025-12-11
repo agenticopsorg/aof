@@ -68,7 +68,7 @@ pub struct AppSettings {
 impl Default for AppSettings {
     fn default() -> Self {
         Self {
-            default_model: "claude-3-5-sonnet-20241022".to_string(),
+            default_model: "gemini-2.0-flash".to_string(),
             default_temperature: 0.7,
             auto_save: true,
             theme: "dark".to_string(),

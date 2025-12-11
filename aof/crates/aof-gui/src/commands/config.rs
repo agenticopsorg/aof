@@ -264,7 +264,7 @@ pub async fn config_delete(
 pub async fn config_generate_example() -> Result<String, String> {
     let example = r#"# AOF Agent Configuration
 name: example-agent
-model: claude-3-5-sonnet-20241022
+model: gemini-2.0-flash
 
 # System prompt defines agent behavior
 system_prompt: |
