@@ -72,16 +72,16 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
 fn print_banner() {
     let version = env!("CARGO_PKG_VERSION");
     println!();
-    println!("╔═══════════════════════════════════════════╦═══════════╗");
-    println!("║                                           ║           ║");
-    println!("║  A O F  :  AGENTIC OPS FRAMEWORK          ║ v{}      ║", version);
-    println!("║  ═ ═ ═  :  DEVOPS AUTOMATION             ║           ║");
-    println!("║                                           ║           ║");
-    println!("║      https://aof.sh                       ║           ║");
-    println!("║                                           ║           ║");
-    println!("║  Commands: help, exit/quit                ║           ║");
-    println!("║                                           ║           ║");
-    println!("╚═══════════════════════════════════════════╩═══════════╝");
+    println!("╔════════════════════════════════════════════╦═══════════╗");
+    println!("║                                            ║           ║");
+    println!("║  A O F  :  AGENTIC OPS FRAMEWORK           ║ v{}      ║", version);
+    println!("║  ═ ═ ═  :  DEVOPS AUTOMATION              ║           ║");
+    println!("║                                            ║           ║");
+    println!("║       https://aof.sh                       ║           ║");
+    println!("║                                            ║           ║");
+    println!("║  Commands: help, exit/quit                 ║           ║");
+    println!("║                                            ║           ║");
+    println!("╚════════════════════════════════════════════╩═══════════╝");
     println!();
 }
 
@@ -90,15 +90,15 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     // Print welcome banner
     print_banner();
     println!("   Agent: {}", agent_name);
-    println!("   {}", "-".repeat(56));
+    println!("   {}", "─".repeat(56));
     println!("   [Ready]\n");
-
-    // Clear the screen effect with whitespace
-    println!();
 
     let stdin = io::stdin();
     let reader = stdin.lock();
-    let mut first_prompt = true;
+
+    // Show initial prompt
+    print!("💬 ");
+    io::stdout().flush().ok();
 
     for line in reader.lines() {
         let input_text = line?;
@@ -106,6 +106,8 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
 
         // Check for exit commands
         if trimmed.is_empty() {
+            print!("💬 ");
+            io::stdout().flush().ok();
             continue;
         }
         if trimmed.to_lowercase() == "exit" || trimmed.to_lowercase() == "quit" {
@@ -117,40 +119,49 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
             println!("  help     Show this help message");
             println!("  exit     Exit the console");
             println!("  quit     Exit the console\n");
+            print!("💬 ");
+            io::stdout().flush().ok();
             continue;
         }
 
-        // Print prompt before first response
-        if first_prompt {
-            first_prompt = false;
-        }
+        // Suppress logs during interactive execution
+        let log_level = std::env::var("RUST_LOG").unwrap_or_default();
+        std::env::set_var("RUST_LOG", "error");
 
-        // Show processing indicator (retro style)
-        print!("[ * ] ");
+        // Show processing indicator
+        print!("⏳ ");
         io::stdout().flush().ok();
 
         // Execute the agent with user input
         match runtime.execute(agent_name, trimmed).await {
             Ok(result) => {
-                // Clear processing indicator and show response in retro email-style format
-                println!("\r[+] Response:");
-                println!("---");
+                // Clear processing indicator and show response
+                println!("\r✓ Response:");
+                println!("─".repeat(56));
 
-                // Format response with retro terminal look
+                // Format response
                 for response_line in result.lines() {
                     println!("{}", response_line);
                 }
 
-                println!("---\n");
+                println!("─".repeat(56));
+                println!();
             }
             Err(e) => {
-                // Handle errors gracefully without stack traces - retro style
-                println!("\r[!] Error: {}\n", e);
+                // Handle errors gracefully
+                println!("\r✗ Error: {}\n", e);
             }
         }
 
-        // Retro prompt style (like old email clients or BBS systems)
-        print!("> ");
+        // Restore log level
+        if log_level.is_empty() {
+            std::env::remove_var("RUST_LOG");
+        } else {
+            std::env::set_var("RUST_LOG", log_level);
+        }
+
+        // Show next prompt
+        print!("💬 ");
         io::stdout().flush().ok();
     }
 
