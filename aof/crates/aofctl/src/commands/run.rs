@@ -70,7 +70,7 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
 }
 
 /// Run agent in interactive REPL mode with beautiful CLI UI
-async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, output: &str) -> Result<()> {
+async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &str) -> Result<()> {
     // Print welcome message with beautiful styling
     println!("\n{}", "=".repeat(60));
     println!("  🤖 Interactive Agent Console - {}", agent_name);
