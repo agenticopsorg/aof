@@ -137,14 +137,14 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
             Ok(result) => {
                 // Clear processing indicator and show response
                 println!("\r✓ Response:");
-                println!("─".repeat(56));
+                println!("{}", "─".repeat(56));
 
                 // Format response
                 for response_line in result.lines() {
                     println!("{}", response_line);
                 }
 
-                println!("─".repeat(56));
+                println!("{}", "─".repeat(56));
                 println!();
             }
             Err(e) => {
