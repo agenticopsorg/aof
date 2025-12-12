@@ -286,9 +286,11 @@ impl Runtime {
             let provider = match parts[0].to_lowercase().as_str() {
                 "anthropic" => ModelProvider::Anthropic,
                 "openai" => ModelProvider::OpenAI,
+                "google" => ModelProvider::Google,
                 "bedrock" => ModelProvider::Bedrock,
                 "azure" => ModelProvider::Azure,
                 "ollama" => ModelProvider::Ollama,
+                "groq" => ModelProvider::Groq,
                 _ => ModelProvider::Custom,
             };
             (provider, parts[1].to_string())
