@@ -159,17 +159,25 @@ install_binary() {
     local install_dir=$(dirname "$install_path")
 
     # Create install directory if it doesn't exist
-    if ! mkdir -p "$install_dir"; then
-        error "Failed to create installation directory: $install_dir"
+    if ! mkdir -p "$install_dir" 2>/dev/null; then
+        # Try with sudo if regular mkdir fails
+        if ! sudo mkdir -p "$install_dir"; then
+            error "Failed to create installation directory: $install_dir"
+        fi
     fi
 
-    # Copy binary
-    if ! cp "$binary" "$install_path"; then
-        error "Failed to install binary to $install_path"
+    # Copy binary (try without sudo first)
+    if ! cp "$binary" "$install_path" 2>/dev/null; then
+        # Try with sudo if regular cp fails
+        if ! sudo cp "$binary" "$install_path"; then
+            error "Failed to install binary to $install_path"
+        fi
+        # If we used sudo, also need sudo for chmod
+        sudo chmod +x "$install_path"
+    else
+        # Make executable
+        chmod +x "$install_path"
     fi
-
-    # Make executable
-    chmod +x "$install_path"
 
     success "Installed aofctl to $install_path"
 }
@@ -249,7 +257,9 @@ main() {
     # Verify installation
     echo ""
     log "Verifying installation..."
-    if "$install_dir_path" --version &>/dev/null; then
+
+    # Check if binary exists and is executable
+    if [[ -x "$install_dir_path" ]]; then
         local installed_version=$("$install_dir_path" --version 2>/dev/null || echo "unknown")
         success "Installation successful!"
         echo ""
@@ -261,7 +271,7 @@ main() {
         echo "  aofctl get agents"
         echo ""
     else
-        error "Installation verification failed"
+        error "Installation verification failed - binary not found or not executable at $install_dir_path"
     fi
 }
 
