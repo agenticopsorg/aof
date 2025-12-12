@@ -321,16 +321,8 @@ impl Runtime {
 
         let mcp_client = McpClientBuilder::new()
             .stdio(
-                "npx",
-                vec![
-                    "-y".to_string(),
-                    "@modelcontextprotocol/server-everything".to_string(),
-                    "stdio".to_string(),
-                    "--roots".to_string(),
-                    "/tmp".to_string(),
-                    "--roots".to_string(),
-                    "/".to_string(),
-                ],
+                "./target/release/smoke-test-mcp",
+                vec![],
             )
             .build()
             .map_err(|e| AofError::tool(format!("Failed to create MCP client: {}", e)))?;

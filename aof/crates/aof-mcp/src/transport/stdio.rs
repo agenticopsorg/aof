@@ -3,7 +3,7 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::{Child, ChildStdin, ChildStdout, Command};
 use tokio::sync::Mutex;
-use tracing::debug;
+use tracing::{debug, info};
 
 use super::{McpRequest, McpResponse, McpTransport, TransportType};
 use aof_core::{AofError, AofResult};
@@ -54,6 +54,8 @@ impl McpTransport for StdioTransport {
         } else {
             format!("{} {}", self.command, self.args.join(" "))
         };
+
+        info!("Executing MCP command: {}", full_command);
 
         // Use shell to resolve PATH and execute command
         let mut child_cmd = Command::new("sh");
