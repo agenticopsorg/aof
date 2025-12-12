@@ -237,16 +237,16 @@ spec:
 
 ```bash
 # Deploy the agent
-aofctl agent apply -f slack-k8s-agent.yaml
+aofctl apply -f slack-k8s-agent.yaml
 
 # Deploy the flow
-aofctl flow apply -f slack-bot-flow.yaml
+aofctl apply -f slack-bot-flow.yaml
 
 # Start the flow (listens for Slack events)
-aofctl flow run slack-k8s-bot-flow --daemon
+aofctl run agentflow slack-k8s-bot-flow --daemon
 
 # Check status
-aofctl flow status slack-k8s-bot-flow
+aofctl describe agentflow slack-k8s-bot-flow
 ```
 
 ## Step 5: Set Up Webhook Endpoint
@@ -270,8 +270,8 @@ ngrok http 3000
 ### Option B: Deploy to Production
 
 ```bash
-# Deploy AOF flow server
-aofctl flow serve --port 3000 --tls-cert /path/to/cert.pem --tls-key /path/to/key.pem
+# Deploy AOF server (built-in to aofctl)
+aofctl run agentflow slack-k8s-bot-flow --port 3000
 
 # Or use a reverse proxy (nginx, Caddy)
 # Point Slack webhook to: https://your-domain.com/slack/events
@@ -489,16 +489,16 @@ nodes:
 
 ```bash
 # View flow logs
-aofctl flow logs slack-k8s-bot-flow -f
+aofctl logs agentflow slack-k8s-bot-flow -f
 
 # Check agent performance
-aofctl agent metrics slack-k8s-bot
+aofctl describe agent slack-k8s-bot
 
 # Debug failed events
-aofctl flow describe slack-k8s-bot-flow
+aofctl describe agentflow slack-k8s-bot-flow
 
 # View Slack API errors
-aofctl flow logs slack-k8s-bot-flow --filter="error"
+aofctl logs agentflow slack-k8s-bot-flow --filter="error"
 ```
 
 ## Production Checklist
@@ -526,10 +526,10 @@ Before deploying to production:
 curl https://your-domain.com/slack/events
 
 # Check flow is running
-aofctl flow status slack-k8s-bot-flow
+aofctl describe agentflow slack-k8s-bot-flow
 
 # View flow logs
-aofctl flow logs slack-k8s-bot-flow -f
+aofctl logs agentflow slack-k8s-bot-flow -f
 ```
 
 ### Approval reactions not working
@@ -550,7 +550,7 @@ timeout_seconds: 60  # Increase from 30
 kubectl get pods
 
 # Test agent directly
-aofctl agent exec slack-k8s-bot "show pods"
+aofctl exec agent slack-k8s-bot -- "show pods"
 ```
 
 ## Next Steps

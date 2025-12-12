@@ -505,17 +505,17 @@ Add to your PagerDuty service:
 
 ```bash
 # Deploy agents
-aofctl agent apply -f diagnostic-agent.yaml
-aofctl agent apply -f remediation-agent.yaml
+aofctl apply -f diagnostic-agent.yaml
+aofctl apply -f remediation-agent.yaml
 
 # Deploy flow
-aofctl flow apply -f incident-response-flow.yaml
+aofctl apply -f incident-response-flow.yaml
 
 # Start the flow
-aofctl flow run incident-auto-response --daemon
+aofctl run agentflow incident-auto-response --daemon
 
 # Verify it's running
-aofctl flow status incident-auto-response
+aofctl describe agentflow incident-auto-response
 ```
 
 ## Step 6: Test the System
@@ -643,19 +643,19 @@ Add to flow:
 
 ```bash
 # View all incident responses
-aofctl flow logs incident-auto-response
+aofctl logs agentflow incident-auto-response
 
 # Get metrics
-aofctl flow metrics incident-auto-response
+aofctl describe agentflow incident-auto-response | grep "success_rate"
 
 # Check success rate
-aofctl flow describe incident-auto-response | grep "success_rate"
+aofctl describe agentflow incident-auto-response
 
 # View diagnostic logs
-aofctl agent logs incident-diagnostic -f
+aofctl logs agent incident-diagnostic -f
 
 # View remediation logs
-aofctl agent logs incident-remediation -f
+aofctl logs agent incident-remediation -f
 ```
 
 ## Production Best Practices

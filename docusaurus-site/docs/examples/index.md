@@ -21,8 +21,8 @@ export OPENAI_API_KEY=sk-...
 export ANTHROPIC_API_KEY=sk-ant-...
 
 # Apply and run
-aofctl agent apply -f kubernetes-agent.yaml
-aofctl agent chat kubernetes-agent
+aofctl apply -f kubernetes-agent.yaml
+aofctl run agent kubernetes-agent
 ```
 
 **Try it:**
@@ -51,14 +51,14 @@ aofctl agent chat kubernetes-agent
 export GITHUB_TOKEN=ghp_...
 
 # Apply agent
-aofctl agent apply -f github-pr-reviewer.yaml
+aofctl apply -f github-pr-reviewer.yaml
 
 # Manual review
-aofctl agent exec github-pr-reviewer "Review PR #123 in myorg/myrepo"
+aofctl exec agent github-pr-reviewer -- "Review PR #123 in myorg/myrepo"
 
 # Or apply the flow for automation
-aofctl flow apply -f github-pr-reviewer.yaml
-aofctl flow run auto-pr-review --daemon
+aofctl apply -f github-pr-reviewer.yaml
+aofctl run agentflow auto-pr-review --daemon
 ```
 
 ---
@@ -82,11 +82,11 @@ export PAGERDUTY_API_KEY=...
 export SLACK_BOT_TOKEN=xoxb-...
 
 # Apply agents and flow
-aofctl agent apply -f incident-responder.yaml
-aofctl flow apply -f incident-responder.yaml
+aofctl apply -f incident-responder.yaml
+aofctl apply -f incident-responder.yaml
 
 # Start the flow
-aofctl flow run incident-auto-response --daemon
+aofctl run agentflow incident-auto-response --daemon
 ```
 
 ---
@@ -110,9 +110,9 @@ export SLACK_SIGNING_SECRET=...
 export SLACK_BOT_USER_ID=U...
 
 # Apply and run
-aofctl agent apply -f slack-bot-flow.yaml
-aofctl flow apply -f slack-bot-flow.yaml
-aofctl flow run slack-k8s-bot --daemon
+aofctl apply -f slack-bot-flow.yaml
+aofctl apply -f slack-bot-flow.yaml
+aofctl run agentflow slack-k8s-bot --daemon
 
 # Test in Slack
 # @k8s-assistant show me all pods
@@ -134,12 +134,12 @@ aofctl flow run slack-k8s-bot --daemon
 **Quick Start:**
 ```bash
 # Apply and run
-aofctl agent apply -f daily-report-flow.yaml
-aofctl flow apply -f daily-report-flow.yaml
+aofctl apply -f daily-report-flow.yaml
+aofctl apply -f daily-report-flow.yaml
 
 # Start scheduled flows
-aofctl flow run daily-cluster-report --daemon
-aofctl flow run weekly-summary-report --daemon
+aofctl run agentflow daily-cluster-report --daemon
+aofctl run agentflow weekly-summary-report --daemon
 
 # Custom report via Slack
 # /report health 24h production
@@ -285,17 +285,17 @@ nodes:
 
 ### Validate YAML
 ```bash
-aofctl agent validate -f kubernetes-agent.yaml
+aofctl apply -f kubernetes-agent.yaml --dry-run
 ```
 
 ### Dry Run Flow
 ```bash
-aofctl flow run my-flow --dry-run
+aofctl run agentflow my-flow --dry-run
 ```
 
 ### Test Agent Locally
 ```bash
-aofctl agent run kubernetes-agent.yaml --input "test query"
+aofctl run agent kubernetes-agent.yaml --input "test query"
 ```
 
 ---
