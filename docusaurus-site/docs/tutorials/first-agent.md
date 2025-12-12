@@ -55,6 +55,10 @@ spec:
 
 Test it:
 ```bash
+# Interactive mode - recommended for testing
+aofctl run agent k8s-helper.yaml
+
+# Or with a single query
 aofctl run agent k8s-helper.yaml --input "How do I check if my deployment is healthy?"
 ```
 

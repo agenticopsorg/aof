@@ -92,17 +92,45 @@ aofctl get ag my-agent
 
 ### `aofctl run` - Execute agents and workflows
 
-Execute agents or workflows with input and options.
+Execute agents or workflows with interactive or single-query mode.
 
 **Syntax:**
 ```bash
 aofctl run <resource-type> <config-file> [flags]
 ```
 
-**Examples:**
+#### Interactive Mode (Default)
+
+When no `--input` flag is provided, the agent runs in interactive REPL mode with a beautiful CLI:
 
 ```bash
-# Run an agent with configuration
+aofctl run agent my-agent.yaml
+```
+
+Output:
+```
+============================================================
+  🤖 Interactive Agent Console - my-agent
+  Type your query and press Enter. Type 'exit' or 'quit' to exit.
+============================================================
+
+💬 You: What is the status?
+
+⏳ Processing...
+✓  Agent Response:
+────────────────────────────────────────────────────────────
+[Agent response here]
+────────────────────────────────────────────────────────────
+
+💬 You:
+```
+
+#### Single Query Mode
+
+Use `--input` for single-execution or automation:
+
+```bash
+# Run an agent with a specific query
 aofctl run agent my-agent-config.yaml --input "What is the status?"
 
 # Run a workflow
@@ -116,8 +144,8 @@ aofctl run agent config.yaml -n production --input "query"
 ```
 
 **Flags:**
-- `-i, --input string` - Input/query for the resource
-- `-o, --output string` - Output format (json|yaml|text)
+- `-i, --input string` - Input/query for the resource (enables single-query mode)
+- `-o, --output string` - Output format (json|yaml|text) [default: text]
 - `-n, --namespace string` - Namespace to run in
 
 ---
