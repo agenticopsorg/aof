@@ -1,11 +1,13 @@
-name: Deploy Docusaurus to GitHub Pages
+name: Build and Deploy Docusaurus
 
 on:
   push:
     branches:
       - main
+      - dev
     paths:
       - 'docusaurus-site/**'
+      - 'docs/**'
       - '.github/workflows/deploy-docs.yml'
   workflow_dispatch:
 
@@ -38,6 +40,12 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Sync shared documentation
+        run: |
+          # Copy any shared docs from /docs to docusaurus-site/docs if needed
+          # This is a placeholder for future documentation consolidation
+          echo "Documentation sync: Single source of truth in docusaurus-site/docs/"
 
       - name: Build website
         run: npm run build
