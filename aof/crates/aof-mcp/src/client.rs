@@ -24,28 +24,34 @@ impl McpClient {
         }
     }
 
-    /// Initialize MCP connection
-    pub async fn initialize(&self) -> AofResult<()> {
+    /// Initialize MCP connection with optional server initialization options
+    pub async fn initialize_with_options(&self, init_options: Option<serde_json::Value>) -> AofResult<()> {
         info!("Initializing MCP client");
 
         // Initialize transport
         let mut transport = self.transport.write().await;
         transport.init().await?;
 
-        // Send initialize request
-        let init_request = McpRequest::new(
-            "initialize",
-            serde_json::json!({
-                "protocolVersion": crate::MCP_VERSION,
-                "capabilities": {
-                    "tools": {}
-                },
-                "clientInfo": {
-                    "name": "aof",
-                    "version": env!("CARGO_PKG_VERSION")
-                }
-            }),
-        );
+        // Build initialize request with server options
+        let mut init_payload = serde_json::json!({
+            "protocolVersion": crate::MCP_VERSION,
+            "capabilities": {
+                "tools": {}
+            },
+            "clientInfo": {
+                "name": "aof",
+                "version": env!("CARGO_PKG_VERSION")
+            }
+        });
+
+        // Add server initialization options if provided
+        if let Some(options) = init_options {
+            if let Some(obj) = init_payload.as_object_mut() {
+                obj.insert("initializationOptions".to_string(), options);
+            }
+        }
+
+        let init_request = McpRequest::new("initialize", init_payload);
 
         let response = transport.request(&init_request).await?;
         debug!("Initialize response: {:?}", response);
@@ -68,6 +74,11 @@ impl McpClient {
 
         *self.initialized.write().await = true;
         Ok(())
+    }
+
+    /// Initialize MCP connection (without server options)
+    pub async fn initialize(&self) -> AofResult<()> {
+        self.initialize_with_options(None).await
     }
 
     /// Call an MCP tool

@@ -319,21 +319,29 @@ impl Runtime {
     ) -> AofResult<Arc<dyn ToolExecutor>> {
         info!("Creating tool executor with {} tools", tool_names.len());
 
-        // Create MCP client
         let mcp_client = McpClientBuilder::new()
             .stdio(
                 "npx",
-                vec!["-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
+                vec![
+                    "-y".to_string(),
+                    "@modelcontextprotocol/server-everything".to_string(),
+                ],
             )
             .build()
             .map_err(|e| AofError::tool(format!("Failed to create MCP client: {}", e)))?;
 
-        // CRITICAL: Initialize the MCP client before use
-        mcp_client.initialize()
+        // CRITICAL: Initialize the MCP client with server-specific options
+        // The server-everything package requires 'roots' for filesystem access
+        let init_options = serde_json::json!({
+            "roots": ["/tmp", "/"],
+            "maxDepth": 10
+        });
+
+        mcp_client.initialize_with_options(Some(init_options))
             .await
             .map_err(|e| AofError::tool(format!("Failed to initialize MCP client: {}", e)))?;
 
-        info!("MCP client initialized successfully");
+        info!("MCP client initialized successfully with server options");
 
         Ok(Arc::new(McpToolExecutor {
             client: Arc::new(mcp_client),
