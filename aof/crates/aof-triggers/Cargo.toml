@@ -11,6 +11,8 @@ authors.workspace = true
 # Workspace dependencies
 aof-core.workspace = true
 aof-runtime.workspace = true
+aof-llm.workspace = true
+aof-memory.workspace = true
 
 # Async runtime
 tokio.workspace = true
