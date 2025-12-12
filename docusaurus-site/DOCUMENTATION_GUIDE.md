@@ -102,7 +102,7 @@ The GitHub Actions workflow (`/.github/workflows/deploy-docs.yml`) automatically
 
 4. **GitHub Actions automatically builds and deploys**
    - Monitor at: https://github.com/gshah/my-framework/actions
-   - Deployed to: https://docs.aof.sh (when configured)
+   - Deployed to: https://aof.sh (when configured)
 
 ### What NOT to Do
 

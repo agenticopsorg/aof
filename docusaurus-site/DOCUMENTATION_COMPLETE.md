@@ -97,7 +97,7 @@ Deploys to GitHub Pages
 
 ```
 [SUCCESS] Generated static files in "build".
-Ready for deployment to https://docs.aof.sh
+Ready for deployment to https://aof.sh
 ```
 
 ---
@@ -204,7 +204,7 @@ my-framework/
 
 3. **Merge to main when approved**
    - Triggers automatic deployment
-   - Updates documentation at docs.aof.sh
+   - Updates documentation at aof.sh
 
 4. **Users learn new pattern immediately**
    - All tutorials use new syntax
@@ -309,7 +309,7 @@ New file explains everything:
 
 ### Ready for
 ✅ PR review and merge to main
-✅ Automatic deployment to docs.aof.sh
+✅ Automatic deployment to aof.sh
 ✅ User consumption and feedback
 
 ---
