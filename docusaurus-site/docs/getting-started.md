@@ -126,21 +126,23 @@ model: ollama:mistral
 ### Step 4: Run Your Agent
 
 ```bash
-# Interactive chat mode
-aofctl run agent hello-agent.yaml
-
-# You'll see:
-Agent 'hello-assistant' is ready. Type your message (or 'exit' to quit):
+# Run agent with a query
+aofctl run agent hello-agent.yaml --input "What's the difference between a Deployment and a StatefulSet?"
 ```
 
-Try asking:
+The agent will process your input and respond:
 ```
-> What's the difference between a Deployment and a StatefulSet?
-
-Agent response:
-A Deployment manages stateless applications with replicas. StatefulSet manages
+Agent: hello-assistant
+Result: A Deployment manages stateless applications with replicas. StatefulSet manages
 stateful applications where each pod has a stable identity and persistent storage.
 ```
+
+You can also run without explicit input (uses a default message):
+```bash
+aofctl run agent hello-agent.yaml
+```
+
+**Note:** Interactive REPL mode (reading from stdin) is planned for a future release. Currently, use `--input` flag for programmatic interaction or pipe input via stdin.
 
 ### Step 5: Verify It Works
 
@@ -156,7 +158,7 @@ kind: Agent
 metadata:
   name: k8s-helper
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
   instructions: |
     You are a Kubernetes expert assistant. Help users run kubectl commands
     and troubleshoot their clusters. Always explain what commands do before running them.
@@ -173,15 +175,15 @@ spec:
 Save this as `k8s-agent.yaml` and run:
 
 ```bash
-aofctl run agent k8s-agent.yaml
+aofctl run agent k8s-agent.yaml --input "How do I check deployment status?"
 ```
 
 Now try:
-```
-> Show me all pods in the default namespace
+```bash
+aofctl run agent k8s-agent.yaml --input "Show me all pods in the default namespace"
 ```
 
-The agent will explain what it's doing and run `kubectl get pods -n default`.
+The agent will explain what it's doing and run `kubectl get pods -n default` to fetch the information.
 
 ## Next Steps
 

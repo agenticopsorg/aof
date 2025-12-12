@@ -2,6 +2,7 @@ use anyhow::{Context, Result};
 use aof_core::AgentConfig;
 use aof_runtime::Runtime;
 use std::fs;
+use std::io::{self, BufRead};
 use tracing::info;
 use crate::resources::ResourceType;
 
@@ -47,7 +48,15 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
         .await
         .context("Failed to load agent")?;
 
-    // Execute the agent
+    // Check if interactive mode should be enabled (when no input provided and stdin is a TTY)
+    if input.is_none() {
+        // Try interactive REPL mode - will gracefully fall back if stdin is not TTY
+        if let Ok(()) = run_agent_interactive(&runtime, &agent_name, output).await {
+            return Ok(());
+        }
+    }
+
+    // Single execution mode
     let input_str = input.unwrap_or("default input");
     let result = runtime
         .execute(&agent_name, input_str)
@@ -55,6 +64,58 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
         .context("Failed to execute agent")?;
 
     // Output result in requested format
+    output_result(&agent_name, &result, output)?;
+
+    Ok(())
+}
+
+/// Run agent in interactive REPL mode with beautiful CLI UI
+async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, output: &str) -> Result<()> {
+    // Print welcome message with beautiful styling
+    println!("\n{}", "=".repeat(60));
+    println!("  🤖 Interactive Agent Console - {}", agent_name);
+    println!("  Type your query and press Enter. Type 'exit' or 'quit' to exit.");
+    println!("{}\n", "=".repeat(60));
+
+    let stdin = io::stdin();
+    let reader = stdin.lock();
+
+    for line in reader.lines() {
+        let input_text = line?;
+
+        // Check for exit commands
+        if input_text.trim().is_empty() {
+            continue;
+        }
+        if input_text.trim().to_lowercase() == "exit"
+            || input_text.trim().to_lowercase() == "quit" {
+            println!("\n{} Goodbye!\n", "👋");
+            break;
+        }
+
+        // Execute the agent with user input
+        print!("\n⏳ Processing...");
+        io::Write::flush(&mut io::stdout()).ok();
+
+        let result = runtime
+            .execute(agent_name, &input_text)
+            .await
+            .context("Failed to execute agent")?;
+
+        // Output result with beautiful formatting
+        println!("\r{}  Agent Response:", "✓".repeat(1));
+        println!("{}\n", "-".repeat(60));
+        println!("{}\n", result);
+        println!("{}", "─".repeat(60));
+        print!("\n💬 You: ");
+        io::Write::flush(&mut io::stdout()).ok();
+    }
+
+    Ok(())
+}
+
+/// Format and output agent result
+fn output_result(agent_name: &str, result: &str, output: &str) -> Result<()> {
     match output {
         "json" => {
             let json_output = serde_json::json!({
@@ -77,7 +138,6 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
             println!("Result: {}", result);
         }
     }
-
     Ok(())
 }
 
