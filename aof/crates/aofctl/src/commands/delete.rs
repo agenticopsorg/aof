@@ -15,13 +15,13 @@ pub async fn execute(resource_type: &str, name: &str, namespace: Option<&str>) -
     }
 
     // Display deletion confirmation
-    println!("Deleting {} '{}' in namespace '{}'...", rt.singular(), name, ns);
+    println!("Deleting {} '{}' in namespace '{}'...", rt.name(), name, ns);
     println!();
 
     // Simulate deletion process
     simulate_deletion(&rt, name, ns).await?;
 
-    println!("✓ {} '{}' deleted successfully", rt.singular(), name);
+    println!("✓ {} '{}' deleted successfully", rt.name(), name);
     println!();
     println!("Note: This is a simulated deletion. In production:");
     println!("  - Resources will be removed from persistent storage");
@@ -55,7 +55,7 @@ async fn simulate_deletion(rt: &ResourceType, name: &str, namespace: &str) -> Re
             std::thread::sleep(std::time::Duration::from_millis(300));
         }
         _ => {
-            println!("  • Removing {} '{}' from namespace '{}'...", rt.singular(), name, namespace);
+            println!("  • Removing {} '{}' from namespace '{}'...", rt.name(), name, namespace);
             std::thread::sleep(std::time::Duration::from_millis(200));
         }
     }
