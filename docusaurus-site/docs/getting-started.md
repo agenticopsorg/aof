@@ -5,7 +5,11 @@ Get up and running with your first AI agent in 5 minutes.
 ## Prerequisites
 
 ### Required
-- **API Key**: Get one from [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/), or use [Ollama](https://ollama.ai/) locally
+- **API Key**: Get one from:
+  - [Google Gemini](https://aistudio.google.com/app/apikey) (Free tier available)
+  - [OpenAI](https://platform.openai.com/api-keys)
+  - [Anthropic](https://console.anthropic.com/)
+  - Or use [Ollama](https://ollama.ai/) locally (free, runs on your machine)
 - **Terminal**: Any Unix shell (bash, zsh, fish)
 
 ### Optional
@@ -21,30 +25,30 @@ Choose your preferred method:
 
 #### Option A: Binary Download (Recommended)
 ```bash
-# Detect your platform and install
-curl -sSL https://aof.dev/install.sh | bash
+# Automatically detects your OS and architecture, downloads and installs
+curl -sSL https://aof.sh/install.sh | bash
 
 # Verify installation
-aofctl version
+aofctl --version
 ```
 
 #### Option B: Cargo Install
 ```bash
-cargo install aofctl
+cargo install --git https://github.com/agenticopsorg/aof aofctl
 
 # Verify installation
-aofctl version
+aofctl --version
 ```
 
 #### Option C: Build from Source
 ```bash
-git clone https://github.com/yourusername/aof.git
+git clone https://github.com/agenticopsorg/aof.git
 cd aof
-cargo build --release
+cargo build --release --package aofctl
 sudo cp target/release/aofctl /usr/local/bin/
 
 # Verify installation
-aofctl version
+aofctl --version
 ```
 
 ### Step 2: Configure API Keys
@@ -52,17 +56,30 @@ aofctl version
 Set your LLM provider API key:
 
 ```bash
-# OpenAI
+# Google Gemini (recommended for free tier)
+export GOOGLE_API_KEY=your-api-key-here
+
+# OR OpenAI
 export OPENAI_API_KEY=sk-...
 
 # OR Anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 
-# OR Ollama (runs locally, no key needed)
+# OR Groq
+export GROQ_API_KEY=your-api-key-here
+
+# OR Ollama (runs locally on your machine, no key needed)
 # Just install: brew install ollama && ollama serve
 ```
 
 **💡 Tip**: Add these to your `~/.zshrc` or `~/.bashrc` to persist across sessions.
+
+**Getting Free API Keys:**
+- **Google Gemini**: https://aistudio.google.com/app/apikey (Free tier: 60 requests/minute)
+- **OpenAI**: https://platform.openai.com/api-keys (Paid, starts with free credits)
+- **Anthropic**: https://console.anthropic.com/ (Paid)
+- **Groq**: https://console.groq.com (Fast inference, free tier available)
+- **Ollama**: https://ollama.ai (Free, runs locally)
 
 ## Create Your First Agent
 
@@ -76,10 +93,34 @@ kind: Agent
 metadata:
   name: hello-assistant
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash  # Using Google Gemini (free tier)
   instructions: |
     You are a friendly assistant that helps DevOps engineers.
     Keep responses concise and practical.
+```
+
+**Available Models:**
+```yaml
+# Google Gemini (Free & Paid)
+model: google:gemini-2.0-flash
+model: google:gemini-1.5-pro
+
+# OpenAI (Paid)
+model: openai:gpt-4o
+model: openai:gpt-4-turbo
+model: openai:gpt-3.5-turbo
+
+# Anthropic (Paid)
+model: anthropic:claude-3-5-sonnet-20241022
+model: anthropic:claude-3-5-haiku-20241022
+
+# Groq (Free & Fast)
+model: groq:llama-3.1-70b-versatile
+model: groq:mixtral-8x7b-32768
+
+# Ollama (Free, runs locally)
+model: ollama:llama2
+model: ollama:mistral
 ```
 
 ### Step 4: Run Your Agent
@@ -89,12 +130,16 @@ spec:
 aofctl run agent hello-agent.yaml
 
 # You'll see:
-> Agent 'hello-assistant' is ready. Type your message (or 'exit' to quit):
+Agent 'hello-assistant' is ready. Type your message (or 'exit' to quit):
 ```
 
 Try asking:
 ```
 > What's the difference between a Deployment and a StatefulSet?
+
+Agent response:
+A Deployment manages stateless applications with replicas. StatefulSet manages
+stateful applications where each pod has a stable identity and persistent storage.
 ```
 
 ### Step 5: Verify It Works
@@ -161,11 +206,16 @@ You now have a working AI agent! Here's where to go next:
 
 ### "API key not found"
 ```bash
-# Make sure you've exported your key
-echo $OPENAI_API_KEY
+# Make sure you've exported your key (example for Gemini)
+echo $GOOGLE_API_KEY
 
 # If empty, set it:
-export OPENAI_API_KEY=sk-...
+export GOOGLE_API_KEY=your-key-here
+
+# Or for your provider:
+export OPENAI_API_KEY=sk-...      # OpenAI
+export ANTHROPIC_API_KEY=sk-ant-... # Anthropic
+export GROQ_API_KEY=...            # Groq
 ```
 
 ### "Command not found: kubectl"
@@ -175,17 +225,20 @@ The agent can't use tools you don't have installed. Either:
 
 ### "Model not supported"
 Check your provider:model format:
+- ✅ `google:gemini-2.0-flash`
 - ✅ `openai:gpt-4`
 - ✅ `anthropic:claude-3-5-sonnet-20241022`
+- ✅ `groq:llama-3.1-70b-versatile`
 - ✅ `ollama:llama3`
 - ❌ `gpt-4` (missing provider)
+- ❌ `gemini` (incomplete - needs provider prefix)
 
 ## Getting Help
 
-- **Documentation**: Full docs at [https://aof.dev/docs](https://aof.dev/docs)
+- **Documentation**: Full docs at [https://aof.sh](https://aof.sh)
 - **Examples**: Check [docs/examples/](examples/) for copy-paste configs
-- **Issues**: Report bugs at [GitHub Issues](https://github.com/yourusername/aof/issues)
-- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/yourusername/aof/discussions)
+- **Issues**: Report bugs at [GitHub Issues](https://github.com/agenticopsorg/aof/issues)
+- **Discussions**: Ask questions in [GitHub Discussions](https://github.com/agenticopsorg/aof/discussions)
 
 ---
 
