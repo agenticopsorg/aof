@@ -77,8 +77,20 @@ impl Runtime {
         debug!("Model created for agent: {}", agent_name);
 
         // Create tool executor if tools are specified
+        // Only create MCP executor for tools that are MCP-based (not system tools like shell, kubectl)
         let tool_executor: Option<Arc<dyn ToolExecutor>> = if !config.tools.is_empty() {
-            Some(self.create_tool_executor(&config.tools).await?)
+            let system_tools = ["shell", "kubectl", "bash", "sh", "python", "node"];
+            let has_system_tools = config.tools.iter().any(|t| system_tools.contains(&t.as_str()));
+            let has_mcp_tools = config.tools.iter().any(|t| !system_tools.contains(&t.as_str()));
+
+            if has_system_tools && !has_mcp_tools {
+                debug!("Agent has only system tools, skipping MCP initialization");
+                None
+            } else if has_mcp_tools {
+                Some(self.create_tool_executor(&config.tools).await?)
+            } else {
+                None
+            }
         } else {
             None
         };
@@ -319,9 +331,19 @@ impl Runtime {
     ) -> AofResult<Arc<dyn ToolExecutor>> {
         info!("Creating tool executor with {} tools", tool_names.len());
 
+        // Find smoke-test-mcp binary in standard locations
+        let mcp_path = if std::path::Path::new("/usr/local/bin/smoke-test-mcp").exists() {
+            "/usr/local/bin/smoke-test-mcp".to_string()
+        } else if std::path::Path::new("/usr/bin/smoke-test-mcp").exists() {
+            "/usr/bin/smoke-test-mcp".to_string()
+        } else {
+            // Fallback to relative path for development
+            "./target/release/smoke-test-mcp".to_string()
+        };
+
         let mcp_client = McpClientBuilder::new()
             .stdio(
-                "./target/release/smoke-test-mcp",
+                mcp_path,
                 vec![],
             )
             .build()
