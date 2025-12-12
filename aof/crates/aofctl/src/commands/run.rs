@@ -146,6 +146,10 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     let mut app_state = AppState::new();
     let should_quit = Arc::new(Mutex::new(false));
 
+    // Add welcome message
+    app_state.chat_history.push(("system".to_string(),
+        format!("Connected to agent: {}\nType your query and press Enter. Commands: help, exit, quit", agent_name)));
+
     // Draw initial screen
     terminal.draw(|f| ui(f, agent_name, &app_state))?;
 
@@ -237,11 +241,11 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
 
 /// Render the TUI with elegant professional styling for DevOps engineers
 fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
-    // Professional color scheme (dark terminal friendly)
-    let primary_blue = Color::Rgb(0, 150, 200);
-    let accent_green = Color::Rgb(0, 200, 100);
-    let warning_orange = Color::Rgb(255, 165, 0);
-    let error_red = Color::Rgb(255, 80, 80);
+    // Minimalist black and white color scheme
+    let primary_white = Color::White;
+    let text_white = Color::White;
+    let text_gray = Color::DarkGray;
+    let emphasis_white = Color::White;
 
     // Main layout with footer for metrics
     let main_layout = Layout::default()
@@ -260,12 +264,12 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
     let chat_block = Block::default()
         .title(Span::styled(
             format!(" {} ", agent_name.to_uppercase()),
-            Style::default().fg(primary_blue).add_modifier(Modifier::BOLD),
+            Style::default().fg(primary_white).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Left)
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Thick)
-        .border_style(Style::default().fg(primary_blue))
+        .border_style(Style::default().fg(primary_white))
         .padding(ratatui::widgets::Padding::symmetric(1, 0));
 
     let mut chat_lines = Vec::new();
@@ -278,15 +282,15 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
                 " ❯ ",
             ),
             "assistant" => (
-                Style::default().fg(accent_green).add_modifier(Modifier::BOLD),
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
                 " ◈ ",
             ),
             "error" => (
-                Style::default().fg(error_red),
+                Style::default().fg(Color::White),
                 " ✗ ",
             ),
             _ => (
-                Style::default().fg(Color::DarkGray),
+                Style::default().fg(Color::Gray),
                 " ► ",
             ),
         };
@@ -306,17 +310,17 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
         let busy_indicator = format!("{} Processing... {}", app.get_spinner(), time_str);
         chat_lines.push(Line::from(Span::styled(
             busy_indicator,
-            Style::default().fg(warning_orange).add_modifier(Modifier::DIM),
+            Style::default().fg(Color::White).add_modifier(Modifier::DIM),
         )));
     } else {
         let mut input_spans = vec![Span::raw(" ❯ ")];
 
         // Show input with cursor
         if app.current_input.is_empty() {
-            input_spans.push(Span::styled("_", Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)));
+            input_spans.push(Span::styled("_", Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)));
         } else {
             input_spans.push(Span::raw(&app.current_input));
-            input_spans.push(Span::styled("_", Style::default().fg(primary_blue).add_modifier(Modifier::BOLD)));
+            input_spans.push(Span::styled("_", Style::default().fg(Color::White).add_modifier(Modifier::BOLD)));
         }
         chat_lines.push(Line::from(input_spans));
     }
@@ -335,22 +339,22 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
     let logs_block = Block::default()
         .title(Span::styled(
             " SYSTEM LOG ",
-            Style::default().fg(primary_blue).add_modifier(Modifier::BOLD),
+            Style::default().fg(primary_white).add_modifier(Modifier::BOLD),
         ))
         .title_alignment(Alignment::Left)
         .borders(Borders::ALL)
         .border_type(ratatui::widgets::BorderType::Thick)
-        .border_style(Style::default().fg(primary_blue))
+        .border_style(Style::default().fg(primary_white))
         .padding(ratatui::widgets::Padding::symmetric(1, 0));
 
     let log_lines: Vec<Line> = app.logs.iter()
         .map(|log| {
             let style = if log.contains("ERROR") {
-                Style::default().fg(error_red).add_modifier(Modifier::BOLD)
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD)
             } else if log.contains("WARN") {
-                Style::default().fg(warning_orange)
+                Style::default().fg(Color::White)
             } else if log.contains("DEBUG") {
-                Style::default().fg(Color::DarkGray).add_modifier(Modifier::DIM)
+                Style::default().fg(Color::Gray).add_modifier(Modifier::DIM)
             } else if log.contains("INFO") {
                 Style::default().fg(Color::White).add_modifier(Modifier::DIM)
             } else {
@@ -389,12 +393,12 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
     };
 
     let metrics_block = Block::default()
-        .style(Style::default().fg(primary_blue).bg(Color::Black))
+        .style(Style::default().fg(Color::White).bg(Color::Black))
         .padding(ratatui::widgets::Padding::symmetric(1, 0));
 
     let metrics_para = Paragraph::new(metrics_text)
         .block(metrics_block)
-        .style(Style::default().fg(accent_green));
+        .style(Style::default().fg(Color::White));
 
     f.render_widget(metrics_para, main_layout[1]);
 }
