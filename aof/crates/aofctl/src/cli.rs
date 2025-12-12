@@ -13,47 +13,112 @@ pub struct Cli {
 
 #[derive(Subcommand, Debug)]
 pub enum Commands {
-    /// Run an agent workflow
+    /// Run an agent with configuration (verb-first: run agent)
     Run {
-        /// Agent configuration file (YAML)
-        #[arg(short, long)]
-        config: String,
+        /// Resource type (agent, workflow, job)
+        resource_type: String,
+
+        /// Resource name or configuration file
+        name_or_config: String,
 
         /// Input/query for the agent
         #[arg(short, long)]
-        input: String,
+        input: Option<String>,
 
         /// Output format (json, yaml, text)
         #[arg(short, long, default_value = "text")]
         output: String,
     },
 
-    /// Get agent/workflow status
+    /// Get resources (verb-first: get agents, get agent <name>)
     Get {
-        /// Resource type (agent, workflow, tool)
-        resource: String,
+        /// Resource type (agent, workflow, tool, etc.)
+        resource_type: String,
 
-        /// Resource name (optional)
+        /// Resource name (optional - lists all if omitted)
         name: Option<String>,
+
+        /// Output format (json, yaml, wide, name)
+        #[arg(short, long, default_value = "wide")]
+        output: String,
+
+        /// Show all namespaces
+        #[arg(long)]
+        all_namespaces: bool,
     },
 
-    /// Apply configuration
+    /// Apply configuration from file (verb-first: apply -f config.yaml)
     Apply {
         /// Configuration file (YAML)
         #[arg(short, long)]
         file: String,
+
+        /// Namespace for the resources
+        #[arg(short, long)]
+        namespace: Option<String>,
     },
 
-    /// Delete resource
+    /// Delete resources (verb-first: delete agent <name>)
     Delete {
         /// Resource type
-        resource: String,
+        resource_type: String,
 
         /// Resource name
         name: String,
+
+        /// Namespace
+        #[arg(short, long)]
+        namespace: Option<String>,
     },
 
-    /// List MCP tools
+    /// Describe resources in detail (verb-first: describe agent <name>)
+    Describe {
+        /// Resource type
+        resource_type: String,
+
+        /// Resource name
+        name: String,
+
+        /// Namespace
+        #[arg(short, long)]
+        namespace: Option<String>,
+    },
+
+    /// Get logs from a resource (verb-first: logs agent <name>)
+    Logs {
+        /// Resource type (agent, job, task)
+        resource_type: String,
+
+        /// Resource name
+        name: String,
+
+        /// Follow log output
+        #[arg(short, long)]
+        follow: bool,
+
+        /// Number of lines to show from the end
+        #[arg(long)]
+        tail: Option<usize>,
+    },
+
+    /// Execute a command in a resource (verb-first: exec agent <name> -- command)
+    Exec {
+        /// Resource type (agent, workflow)
+        resource_type: String,
+
+        /// Resource name
+        name: String,
+
+        /// Command to execute
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        command: Vec<String>,
+    },
+
+    /// List available API resources
+    ApiResources,
+
+    /// List MCP tools (legacy command, use 'get mcptools' instead)
+    #[command(hide = true)]
     Tools {
         /// MCP server command
         #[arg(long)]
@@ -64,7 +129,8 @@ pub enum Commands {
         args: Vec<String>,
     },
 
-    /// Validate agent configuration
+    /// Validate agent configuration (legacy command, use 'apply --dry-run' instead)
+    #[command(hide = true)]
     Validate {
         /// Configuration file
         #[arg(short, long)]
@@ -79,15 +145,51 @@ impl Cli {
     pub async fn execute(self) -> anyhow::Result<()> {
         match self.command {
             Commands::Run {
-                config,
+                resource_type,
+                name_or_config,
                 input,
                 output,
-            } => commands::run::execute(&config, &input, &output).await,
-            Commands::Get { resource, name } => {
-                commands::get::execute(&resource, name.as_deref()).await
+            } => {
+                commands::run::execute(&resource_type, &name_or_config, input.as_deref(), &output)
+                    .await
             }
-            Commands::Apply { file } => commands::apply::execute(&file).await,
-            Commands::Delete { resource, name } => commands::delete::execute(&resource, &name).await,
+            Commands::Get {
+                resource_type,
+                name,
+                output,
+                all_namespaces,
+            } => {
+                commands::get::execute(&resource_type, name.as_deref(), &output, all_namespaces)
+                    .await
+            }
+            Commands::Apply { file, namespace } => {
+                commands::apply::execute(&file, namespace.as_deref()).await
+            }
+            Commands::Delete {
+                resource_type,
+                name,
+                namespace,
+            } => commands::delete::execute(&resource_type, &name, namespace.as_deref()).await,
+            Commands::Describe {
+                resource_type,
+                name,
+                namespace: _,
+            } => {
+                commands::describe::execute(&resource_type, &name)
+                    .await
+            }
+            Commands::Logs {
+                resource_type,
+                name,
+                follow,
+                tail,
+            } => commands::logs::execute(&resource_type, &name, follow, tail).await,
+            Commands::Exec {
+                resource_type,
+                name,
+                command,
+            } => commands::exec::execute(&resource_type, &name, command).await,
+            Commands::ApiResources => commands::api_resources::execute().await,
             Commands::Tools { server, args } => commands::tools::execute(&server, &args).await,
             Commands::Validate { file } => commands::validate::execute(&file).await,
             Commands::Version => commands::version::execute().await,
