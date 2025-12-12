@@ -1,23 +1,11 @@
-# Smoke Test Agent Configuration
-# Uses the local smoke-test-mcp server for testing without external dependencies
-# This agent provides quick smoke testing of the AOF framework
-
 name: smoke-test-agent
-model: openai:gpt-4
-system_prompt: |
-  You are a helpful assistant. You have access to tools to echo messages, do simple math,
-  and get system information. Use these tools to respond to user requests.
-
+model: gemini-2.0-flash
+provider: google
+system_prompt: "You are a helpful assistant with tools to echo messages, do math, and get system info."
 tools:
   - echo
   - add
   - get_system_info
-
 max_iterations: 10
 temperature: 0.7
 max_tokens: 1000
-
-# Memory configuration (optional)
-memory:
-  backend: in_memory
-  max_entries: 100

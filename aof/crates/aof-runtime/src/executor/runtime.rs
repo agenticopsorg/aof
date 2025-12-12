@@ -325,23 +325,22 @@ impl Runtime {
                 vec![
                     "-y".to_string(),
                     "@modelcontextprotocol/server-everything".to_string(),
+                    "stdio".to_string(),
+                    "--roots".to_string(),
+                    "/tmp".to_string(),
+                    "--roots".to_string(),
+                    "/".to_string(),
                 ],
             )
             .build()
             .map_err(|e| AofError::tool(format!("Failed to create MCP client: {}", e)))?;
 
-        // CRITICAL: Initialize the MCP client with server-specific options
-        // The server-everything package requires 'roots' for filesystem access
-        let init_options = serde_json::json!({
-            "roots": ["/tmp", "/"],
-            "maxDepth": 10
-        });
-
-        mcp_client.initialize_with_options(Some(init_options))
+        // Initialize the MCP client
+        mcp_client.initialize()
             .await
             .map_err(|e| AofError::tool(format!("Failed to initialize MCP client: {}", e)))?;
 
-        info!("MCP client initialized successfully with server options");
+        info!("MCP client initialized successfully with tools: {:?}", tool_names);
 
         Ok(Arc::new(McpToolExecutor {
             client: Arc::new(mcp_client),

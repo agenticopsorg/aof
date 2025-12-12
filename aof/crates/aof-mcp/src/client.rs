@@ -125,6 +125,7 @@ pub struct McpClientBuilder {
     command: Option<String>,
     args: Vec<String>,
     endpoint: Option<String>,
+    env_vars: HashMap<String, String>,
 }
 
 impl McpClientBuilder {
@@ -134,6 +135,7 @@ impl McpClientBuilder {
             command: None,
             args: Vec::new(),
             endpoint: None,
+            env_vars: HashMap::new(),
         }
     }
 
@@ -141,6 +143,11 @@ impl McpClientBuilder {
         self.transport_type = TransportType::Stdio;
         self.command = Some(command.into());
         self.args = args;
+        self
+    }
+
+    pub fn with_env(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
+        self.env_vars.insert(key.into(), value.into());
         self
     }
 
@@ -162,7 +169,12 @@ impl McpClientBuilder {
         let transport: Box<dyn McpTransport> = match self.transport_type {
             TransportType::Stdio => {
                 let command = self.command.ok_or_else(|| AofError::config("Command required for stdio transport"))?;
-                Box::new(crate::transport::stdio::StdioTransport::new(command, self.args))
+                let mut stdio_transport = crate::transport::stdio::StdioTransport::new(command, self.args);
+                // Add environment variables if provided
+                if !self.env_vars.is_empty() {
+                    stdio_transport = stdio_transport.with_envs(self.env_vars);
+                }
+                Box::new(stdio_transport)
             }
             #[cfg(feature = "sse")]
             TransportType::Sse => {

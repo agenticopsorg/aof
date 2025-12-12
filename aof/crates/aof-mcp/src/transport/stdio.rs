@@ -15,6 +15,7 @@ pub struct StdioTransport {
     stdout: Arc<Mutex<Option<BufReader<ChildStdout>>>>,
     command: String,
     args: Vec<String>,
+    env_vars: std::collections::HashMap<String, String>,
 }
 
 impl StdioTransport {
@@ -25,7 +26,20 @@ impl StdioTransport {
             stdout: Arc::new(Mutex::new(None)),
             command: command.into(),
             args,
+            env_vars: std::collections::HashMap::new(),
         }
+    }
+
+    /// Add an environment variable to be passed to the subprocess
+    pub fn with_env(mut self, key: String, value: String) -> Self {
+        self.env_vars.insert(key, value);
+        self
+    }
+
+    /// Add multiple environment variables
+    pub fn with_envs(mut self, vars: std::collections::HashMap<String, String>) -> Self {
+        self.env_vars.extend(vars);
+        self
     }
 }
 
@@ -42,12 +56,20 @@ impl McpTransport for StdioTransport {
         };
 
         // Use shell to resolve PATH and execute command
-        let mut child = Command::new("sh")
+        let mut child_cmd = Command::new("sh");
+        child_cmd
             .arg("-c")
             .arg(&full_command)
             .env("PATH", std::env::var("PATH").unwrap_or_else(|_|
                 "/usr/local/bin:/usr/bin:/bin:/opt/homebrew/bin".to_string()
-            ))
+            ));
+
+        // Add custom environment variables
+        for (key, value) in &self.env_vars {
+            child_cmd.env(key, value);
+        }
+
+        let mut child = child_cmd
             .stdin(std::process::Stdio::piped())
             .stdout(std::process::Stdio::piped())
             .stderr(std::process::Stdio::piped())
