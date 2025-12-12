@@ -156,6 +156,7 @@ verify_checksum() {
 install_binary() {
     local binary="$1"
     local install_path="$2"
+    local install_dir=$(dirname "$install_path")
 
     # Create install directory if it doesn't exist
     if ! mkdir -p "$install_dir"; then
