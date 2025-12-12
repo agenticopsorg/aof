@@ -15,7 +15,11 @@ In this tutorial, you'll build a production-ready Kubernetes helper agent from s
 
 - `aofctl` installed ([Getting Started](../getting-started.md))
 - `kubectl` installed (for K8s tools)
-- API key for OpenAI, Anthropic, or Ollama
+- API key for Google Gemini, OpenAI, Anthropic, or Ollama
+  - **Google Gemini (recommended)**: Get key at [Google AI Studio](https://aistudio.google.com/apikey), set `GOOGLE_API_KEY` environment variable
+  - OpenAI: Set `OPENAI_API_KEY`
+  - Anthropic: Set `ANTHROPIC_API_KEY`
+  - Ollama: No key needed, runs locally
 
 ## Step 1: Basic Agent Definition
 
@@ -31,7 +35,7 @@ metadata:
     team: platform
 
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
 
   instructions: |
     You are an expert Kubernetes operations assistant for DevOps engineers.
@@ -61,9 +65,9 @@ Try asking:
 
 The agent will explain but can't actually run kubectl yet. Let's add that.
 
-## Step 2: Add Shell Tool
+## Step 2: Add Instructions for Common Tasks
 
-Update `k8s-helper.yaml` to add kubectl access:
+Enhance the agent's instructions to guide kubectl usage effectively:
 
 ```yaml
 apiVersion: aof.dev/v1
@@ -75,49 +79,47 @@ metadata:
     team: platform
 
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
 
   instructions: |
     You are an expert Kubernetes operations assistant for DevOps engineers.
 
     Your role:
-    - Help users run kubectl commands safely
+    - Help users manage Kubernetes clusters with kubectl
     - Troubleshoot pod, deployment, and service issues
     - Explain K8s concepts clearly and concisely
     - Always explain what a command does before running it
 
+    When providing kubectl commands:
+    - Always specify the namespace unless it's default
+    - Suggest --dry-run for potentially destructive operations
+    - Show the command first, then explain each part
+    - Provide examples of successful vs. failing outputs
+
     Guidelines:
     - Ask for namespace if not specified
-    - Suggest --dry-run for destructive operations
     - Provide YAML examples when helpful
     - Keep responses practical and actionable
-
-  tools:
-    - type: Shell
-      config:
-        allowed_commands:
-          - kubectl
-          - helm
-          - k9s
-        working_directory: /tmp
-        timeout_seconds: 30
+    - Link to official Kubernetes docs when appropriate
 ```
 
-Test it again:
+Test it:
 ```bash
 aofctl run agent k8s-helper.yaml
 ```
 
-Now try:
+Try asking:
 ```
-> Show me all pods in the default namespace
+> How do I check if my deployment is healthy?
+> Show me the command to list all pods in the default namespace
+> What's a StatefulSet and when should I use it?
 ```
 
-The agent will run `kubectl get pods -n default` and explain the output.
+The agent will provide detailed explanations with kubectl commands.
 
-## Step 3: Add MCP Server (kubectl-mcp)
+## Step 3: Add GitHub Knowledge Integration
 
-For more structured Kubernetes access, add the kubectl MCP server:
+Enhance the agent to also help with GitHub repositories and DevOps workflows:
 
 ```yaml
 apiVersion: aof.dev/v1
@@ -129,49 +131,53 @@ metadata:
     team: platform
 
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
 
   instructions: |
-    You are an expert Kubernetes operations assistant for DevOps engineers.
+    You are an expert DevOps engineer assistant covering both Kubernetes and GitHub.
 
-    Your role:
-    - Help users run kubectl commands safely
-    - Troubleshoot pod, deployment, and service issues
-    - Explain K8s concepts clearly and concisely
-    - Always explain what a command does before running it
+    Your responsibilities:
+    1. **Kubernetes Operations:**
+       - Help users manage Kubernetes clusters with kubectl
+       - Troubleshoot pod, deployment, and service issues
+       - Explain K8s concepts clearly and concisely
+       - Always explain what a command does before running it
 
-    Guidelines:
-    - Ask for namespace if not specified
-    - Suggest --dry-run for destructive operations
-    - Provide YAML examples when helpful
-    - Keep responses practical and actionable
+    2. **GitHub Repository Assistance:**
+       - Help understand Kubernetes project structure on GitHub
+       - Explain GitHub workflows and CI/CD practices
+       - Provide guidance on open source contributions
+       - Assist with repository insights and best practices
 
-  tools:
-    - type: Shell
-      config:
-        allowed_commands:
-          - kubectl
-          - helm
-        working_directory: /tmp
-        timeout_seconds: 30
-
-    - type: MCP
-      config:
-        name: kubectl-mcp
-        command: ["npx", "-y", "@modelcontextprotocol/server-kubectl"]
-        env:
-          KUBECONFIG: "${KUBECONFIG}"
+    3. **Guidelines:**
+       - Ask for namespace if not specified
+       - Suggest --dry-run for destructive operations
+       - Provide YAML examples when helpful
+       - Keep responses practical and actionable
 ```
 
-The MCP server provides structured tools for:
-- Listing resources
-- Describing resources
-- Getting logs
-- Executing commands in pods
+Test it:
+```bash
+aofctl run agent k8s-helper.yaml
+```
 
-## Step 4: Add Memory for Context
+Try asking:
+```
+> How do I check if my ArgoCD deployment is healthy?
+> What are the main areas to contribute to in Kubernetes?
+> What's the difference between a Pod and a Deployment?
+```
 
-Let's make the agent remember conversation context:
+**Note on MCP Servers:** While the tutorial demonstrates agent capabilities, actual MCP server integration (for structured tool execution) requires setting up servers like:
+- `kubectl-ai --mcp-server` for advanced kubectl operations
+- Official GitHub MCP server for repository queries
+- Prometheus MCP server for monitoring metrics
+
+These are advanced features for later in your journey.
+
+## Step 4: Configure Model Parameters
+
+Fine-tune the model behavior for more deterministic responses:
 
 ```yaml
 apiVersion: aof.dev/v1
@@ -183,63 +189,7 @@ metadata:
     team: platform
 
 spec:
-  model: openai:gpt-4
-
-  instructions: |
-    You are an expert Kubernetes operations assistant for DevOps engineers.
-
-    Your role:
-    - Help users run kubectl commands safely
-    - Troubleshoot pod, deployment, and service issues
-    - Explain K8s concepts clearly and concisely
-    - Always explain what a command does before running it
-
-    Guidelines:
-    - Ask for namespace if not specified
-    - Suggest --dry-run for destructive operations
-    - Provide YAML examples when helpful
-    - Keep responses practical and actionable
-
-  tools:
-    - type: Shell
-      config:
-        allowed_commands:
-          - kubectl
-          - helm
-        working_directory: /tmp
-        timeout_seconds: 30
-
-    - type: MCP
-      config:
-        name: kubectl-mcp
-        command: ["npx", "-y", "@modelcontextprotocol/server-kubectl"]
-        env:
-          KUBECONFIG: "${KUBECONFIG}"
-
-  memory:
-    type: File
-    config:
-      path: ./k8s-helper-memory.json
-      max_messages: 50
-```
-
-Now the agent will remember your previous questions in the same session.
-
-## Step 5: Configure Model Parameters
-
-Fine-tune the model behavior:
-
-```yaml
-apiVersion: aof.dev/v1
-kind: Agent
-metadata:
-  name: k8s-helper
-  labels:
-    purpose: operations
-    team: platform
-
-spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
 
   model_config:
     temperature: 0.3        # Lower = more deterministic
@@ -260,104 +210,96 @@ spec:
     - Suggest --dry-run for destructive operations
     - Provide YAML examples when helpful
     - Keep responses practical and actionable
-
-  tools:
-    - type: Shell
-      config:
-        allowed_commands:
-          - kubectl
-          - helm
-        working_directory: /tmp
-        timeout_seconds: 30
-
-    - type: MCP
-      config:
-        name: kubectl-mcp
-        command: ["npx", "-y", "@modelcontextprotocol/server-kubectl"]
-        env:
-          KUBECONFIG: "${KUBECONFIG}"
-
-  memory:
-    type: File
-    config:
-      path: ./k8s-helper-memory.json
-      max_messages: 50
 ```
 
-## Step 6: Deploy the Agent
-
-Instead of running interactively, deploy it as a persistent agent:
-
+Test it with kubectl commands:
 ```bash
-# Apply the configuration
-aofctl apply -f k8s-helper.yaml
-
-# Verify it's running
-aofctl get agent k8s-helper
-
-# Check status
-aofctl describe agent k8s-helper
+aofctl run agent k8s-helper.yaml
 ```
 
-## Step 7: Interact with the Agent
-
-Now you can interact via CLI:
-
-```bash
-# Run agent interactively
-aofctl run agent k8s-helper
-
-# Or use exec for one-shot commands
-aofctl exec agent k8s-helper -- "kubectl get pods"
+Try asking:
+```
+> Show me how to check if a deployment is healthy in the default namespace
+> What's the command to list all running pods?
+> Explain the difference between a Service and an Ingress
 ```
 
-## Step 8: Monitor and Debug
+## Step 5: Extend with GitHub Knowledge
 
-```bash
-# View agent logs
-aofctl logs agent k8s-helper
+Enhance the agent to help with Kubernetes resources and DevOps practices:
 
-# Follow logs in real-time
-aofctl logs agent k8s-helper --follow
-
-# Get detailed status
-aofctl describe agent k8s-helper
-
-# Check memory usage
-ls -lh k8s-helper-memory.json
-```
-
-## Advanced: Add HTTP Tool
-
-Let's make the agent able to check service endpoints:
+Create `k8s-github-agent.yaml`:
 
 ```yaml
+apiVersion: aof.dev/v1
+kind: Agent
+metadata:
+  name: k8s-github-helper
+  labels:
+    purpose: operations
+    team: platform
+
 spec:
-  tools:
-    - type: Shell
-      config:
-        allowed_commands: [kubectl, helm]
+  model: google:gemini-2.0-flash
 
-    - type: MCP
-      config:
-        name: kubectl-mcp
-        command: ["npx", "-y", "@modelcontextprotocol/server-kubectl"]
+  model_config:
+    temperature: 0.3
+    max_tokens: 2000
 
-    - type: HTTP
-      config:
-        base_url: http://localhost
-        timeout_seconds: 10
-        allowed_methods: [GET, POST]
+  instructions: |
+    You are an expert DevOps engineer assistant covering both Kubernetes and GitHub.
+
+    Your responsibilities:
+    1. **Kubernetes Operations:**
+       - Help users manage Kubernetes clusters with kubectl
+       - Troubleshoot pod, deployment, and service issues
+       - Explain K8s concepts clearly and concisely
+       - Always explain what a command does before running it
+
+    2. **GitHub Repository Assistance:**
+       - Help understand Kubernetes project structure on GitHub
+       - Explain GitHub workflows and CI/CD practices
+       - Provide guidance on open source contributions
+       - Assist with repository insights and best practices
+
+    3. **Guidelines:**
+       - Ask for namespace if not specified
+       - Suggest --dry-run for destructive operations
+       - Provide YAML examples when helpful
+       - Keep responses practical and actionable
 ```
 
-Now ask:
+Test it:
+```bash
+aofctl run agent k8s-github-agent.yaml
 ```
-> Check if the nginx service on port 8080 is responding
+
+Try asking:
 ```
+> How do I check if my ArgoCD deployment is healthy?
+> What are the main areas to contribute to in Kubernetes?
+> Show me the kubectl command to view deployment events
+```
+
+## Step 6: Advanced Usage with kubectl Commands
+
+The agent can provide detailed kubectl commands and explanations:
+
+```bash
+# Interactive mode - great for learning
+aofctl run agent k8s-helper.yaml
+
+# Example interaction:
+# > Show me all pods in kube-system namespace
+# > What does a ConfigMap do?
+# > How do I scale a deployment to 5 replicas?
+```
+
+The agent will explain each command before you run it, helping you understand Kubernetes better.
 
 ## Complete Final Agent
 
-Here's the full production-ready configuration:
+Here's the full production-ready configuration that combines all features:
 
 ```yaml
 apiVersion: aof.dev/v1
@@ -373,11 +315,12 @@ metadata:
     owner: "platform-team@company.com"
 
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
 
   model_config:
     temperature: 0.3
     max_tokens: 2000
+    top_p: 0.9
 
   instructions: |
     You are an expert Kubernetes operations assistant for DevOps engineers.
@@ -393,62 +336,28 @@ spec:
     - Suggest --dry-run for destructive operations
     - Provide YAML examples when helpful
     - Keep responses practical and actionable
-    - Check service health when troubleshooting
-
-  tools:
-    - type: Shell
-      config:
-        allowed_commands:
-          - kubectl
-          - helm
-        working_directory: /tmp
-        timeout_seconds: 30
-
-    - type: MCP
-      config:
-        name: kubectl-mcp
-        command: ["npx", "-y", "@modelcontextprotocol/server-kubectl"]
-        env:
-          KUBECONFIG: "${KUBECONFIG}"
-
-    - type: HTTP
-      config:
-        base_url: http://localhost
-        timeout_seconds: 10
-        allowed_methods: [GET, POST]
-
-  memory:
-    type: File
-    config:
-      path: ./k8s-helper-memory.json
-      max_messages: 50
+    - Reference Kubernetes official documentation when appropriate
 ```
 
 ## Testing Your Agent
 
-Create a test script `test-agent.sh`:
+Test the agent with various Kubernetes questions:
 
 ```bash
-#!/bin/bash
-
-echo "Test 1: List pods"
-aofctl agent exec k8s-helper "Show all pods in kube-system"
-
-echo -e "\nTest 2: Check deployment"
-aofctl agent exec k8s-helper "Is the coredns deployment healthy?"
-
-echo -e "\nTest 3: Troubleshoot"
-aofctl agent exec k8s-helper "Find any pods that are not running"
-
-echo -e "\nTest 4: Explain"
-aofctl agent exec k8s-helper "What's the difference between a Service and an Ingress?"
+aofctl run agent k8s-helper.yaml
 ```
 
-Run it:
-```bash
-chmod +x test-agent.sh
-./test-agent.sh
+Example interactions:
 ```
+> Show me all pods in the kube-system namespace
+> Is the coredns deployment healthy?
+> What's the kubectl command to view deployment events?
+> Explain the difference between a Service and an Ingress
+> How do I scale a deployment to 5 replicas?
+> Show me how to check pod logs
+```
+
+The agent will provide detailed explanations and kubectl commands for all your Kubernetes operations.
 
 ## Next Steps
 
@@ -461,35 +370,44 @@ You now have a production-ready Kubernetes assistant! Here's what to try next:
 
 ## Troubleshooting
 
-### Agent can't run kubectl
+### "API key not found" error
 ```bash
-# Check kubectl is in PATH
-which kubectl
+# Make sure GOOGLE_API_KEY is set
+echo $GOOGLE_API_KEY
 
-# Check KUBECONFIG
-echo $KUBECONFIG
+# If empty, set it in your shell
+export GOOGLE_API_KEY=AIza...
+
+# Or add to ~/.zshrc/.bashrc for persistence
+echo 'export GOOGLE_API_KEY=AIza...' >> ~/.zshrc
+source ~/.zshrc
+```
+
+### Agent not responding
+```bash
+# Check aofctl is installed
+aofctl version
+
+# Verify the agent YAML is valid
+cat k8s-helper.yaml
+
+# Run with verbose output
+aofctl run agent k8s-helper.yaml
+```
+
+### kubectl commands not working
+```bash
+# Check kubectl is installed and accessible
+which kubectl
 
 # Verify cluster access
 kubectl cluster-info
-```
 
-### Memory file errors
-```bash
-# Check file permissions
-ls -l k8s-helper-memory.json
+# Check current context
+kubectl config current-context
 
-# Reset memory
-rm k8s-helper-memory.json
-aofctl agent apply -f k8s-helper.yaml
-```
-
-### MCP server not starting
-```bash
-# Test MCP server manually
-npx -y @modelcontextprotocol/server-kubectl
-
-# Check Node.js version
-node --version  # Should be v18+
+# List available contexts
+kubectl config get-contexts
 ```
 
 ---
