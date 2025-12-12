@@ -2,7 +2,7 @@ use anyhow::{Context, Result};
 use aof_core::AgentConfig;
 use aof_runtime::Runtime;
 use std::fs;
-use std::io::{self, BufRead, IsTerminal};
+use std::io::{self, BufRead, IsTerminal, Write};
 use tracing::info;
 use crate::resources::ResourceType;
 
@@ -68,46 +68,90 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
     Ok(())
 }
 
-/// Run agent in interactive REPL mode with beautiful CLI UI
+/// Print ASCII banner for AOF (Agentic Ops Framework)
+fn print_banner() {
+    let version = env!("CARGO_PKG_VERSION");
+    println!();
+    println!("╔════════════════════════════════════════╦═════════════╗");
+    println!("║                                        ║             ║");
+    println!("║    A O F  :  AGENTIC OPS FRAMEWORK     ║  v{}      ║", version);
+    println!("║    ═ ═ ═  :  DEVOPS AUTOMATION        ║             ║");
+    println!("║                                        ║             ║");
+    println!("║         https://aof.sh                ║             ║");
+    println!("║                                        ║             ║");
+    println!("║     Commands: help, exit/quit         ║             ║");
+    println!("║                                        ║             ║");
+    println!("╚════════════════════════════════════════╩═════════════╝");
+    println!();
+}
+
+/// Run agent in interactive REPL mode with professional CLI UI
 async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &str) -> Result<()> {
-    // Print welcome message with beautiful styling
-    println!("\n{}", "=".repeat(60));
-    println!("  🤖 Interactive Agent Console - {}", agent_name);
-    println!("  Type your query and press Enter. Type 'exit' or 'quit' to exit.");
-    println!("{}\n", "=".repeat(60));
+    // Print welcome banner
+    print_banner();
+    println!("   Agent: {}", agent_name);
+    println!("   {}", "-".repeat(56));
+    println!("   [Ready]\n");
+
+    // Clear the screen effect with whitespace
+    println!();
 
     let stdin = io::stdin();
     let reader = stdin.lock();
+    let mut first_prompt = true;
 
     for line in reader.lines() {
         let input_text = line?;
+        let trimmed = input_text.trim();
 
         // Check for exit commands
-        if input_text.trim().is_empty() {
+        if trimmed.is_empty() {
             continue;
         }
-        if input_text.trim().to_lowercase() == "exit"
-            || input_text.trim().to_lowercase() == "quit" {
-            println!("\n{} Goodbye!\n", "👋");
+        if trimmed.to_lowercase() == "exit" || trimmed.to_lowercase() == "quit" {
+            println!("\n-- Exiting Agentic Ops Framework --\n");
             break;
         }
+        if trimmed.to_lowercase() == "help" {
+            println!("\nAvailable commands:");
+            println!("  help     Show this help message");
+            println!("  exit     Exit the console");
+            println!("  quit     Exit the console\n");
+            continue;
+        }
+
+        // Print prompt before first response
+        if first_prompt {
+            first_prompt = false;
+        }
+
+        // Show processing indicator (retro style)
+        print!("[ * ] ");
+        io::stdout().flush().ok();
 
         // Execute the agent with user input
-        print!("\n⏳ Processing...");
-        io::Write::flush(&mut io::stdout()).ok();
+        match runtime.execute(agent_name, trimmed).await {
+            Ok(result) => {
+                // Clear processing indicator and show response in retro email-style format
+                println!("\r[+] Response:");
+                println!("---");
 
-        let result = runtime
-            .execute(agent_name, &input_text)
-            .await
-            .context("Failed to execute agent")?;
+                // Format response with retro terminal look
+                for response_line in result.lines() {
+                    println!("{}", response_line);
+                }
 
-        // Output result with beautiful formatting
-        println!("\r{}  Agent Response:", "✓".repeat(1));
-        println!("{}\n", "-".repeat(60));
-        println!("{}\n", result);
-        println!("{}", "─".repeat(60));
-        print!("\n💬 You: ");
-        io::Write::flush(&mut io::stdout()).ok();
+                println!("---\n");
+            }
+            Err(e) => {
+                // Handle errors gracefully without stack traces - retro style
+                println!("\r[!] Error: {}\n", e);
+            }
+        }
+
+        // Retro prompt style (like old email clients or BBS systems)
+        print!("> ");
+        io::stdout().flush().ok();
     }
 
     Ok(())
