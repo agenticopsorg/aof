@@ -63,10 +63,39 @@ This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Co
 - `npx claude-flow sparc concurrent <mode> "<tasks-file>"` - Multi-task processing
 
 ### Build Commands
-- `npm run build` - Build project
-- `npm run test` - Run tests
-- `npm run lint` - Linting
-- `npm run typecheck` - Type checking
+
+**Quick validation (as needed):**
+
+```bash
+# 1. Optional: Fast pre-compile checks (5 seconds) - catches 80% of errors
+./scripts/test-pre-compile.sh
+
+# 2. Build:
+cargo build --release
+
+# 3. Optional: End-to-end validation:
+./scripts/test-agent.sh
+```
+
+**When to use pre-compile tests:**
+- ✅ Before major changes
+- ✅ When debugging issues
+- ✅ When testing new features
+- ✅ 9x faster than full build (5s vs 45s)
+- ✅ Catches syntax, unit tests, patterns in one go
+
+**Complete Build Process:**
+1. `./scripts/test-pre-compile.sh` - Fast validation
+2. `cargo check --all-features` - Syntax validation
+3. `cargo test --lib` - Unit tests
+4. `cargo build --release` - Full release build
+5. `./scripts/test-agent.sh` - End-to-end validation
+
+**Rust-Specific Commands:**
+- `cargo check` - Quick syntax check (no build)
+- `cargo test --lib` - Unit tests only
+- `cargo build --release` - Optimized release build
+- `cargo clippy --all-targets` - Static analysis
 
 ## SPARC Workflow Phases
 
@@ -83,6 +112,52 @@ This project uses SPARC (Specification, Pseudocode, Architecture, Refinement, Co
 - **Test-First**: Write tests before implementation
 - **Clean Architecture**: Separate concerns
 - **Documentation**: Keep updated
+
+## 🧪 Testing Options (Rust/Cargo Projects)
+
+### Available Test Tools
+
+**Optional pre-compile validation (5 seconds):**
+```bash
+./scripts/test-pre-compile.sh
+```
+
+This validates:
+- ✅ Syntax errors
+- ✅ Unit tests
+- ✅ Clippy static analysis
+- ✅ MCP initialization patterns
+- ✅ Common error patterns
+- ✅ Configuration consistency
+
+### Test Options by Use Case
+
+| Scenario | Command | Time |
+|----------|---------|------|
+| Quick check before building | `./scripts/test-pre-compile.sh` | 5s |
+| Unit tests only | `cargo test --lib` | 10s |
+| MCP initialization | `cargo test --lib mcp_initialization` | 5s |
+| Tool executor | `cargo test --lib tool_executor` | 5s |
+| Full release build | `cargo build --release` | 45s |
+| Full validation | `./scripts/test-agent.sh` | 10s |
+| All tests | `cargo test --all` | 30s |
+
+### Error Prevention System
+
+The codebase includes an **Error Knowledge Base (RAG)** that:
+- Tracks recurring errors
+- Stores solutions for known problems
+- Helps agents learn from past mistakes
+- Prevents the same error from happening twice
+
+Access it in code:
+```rust
+use aof_core::ErrorKnowledgeBase;
+
+let kb = ErrorKnowledgeBase::new();
+let similar_errors = kb.find_similar("MCP", &["initialize"]);
+let stats = kb.stats();
+```
 
 ## 🚀 Available Agents (54 Total)
 

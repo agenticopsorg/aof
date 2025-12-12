@@ -328,6 +328,13 @@ impl Runtime {
             .build()
             .map_err(|e| AofError::tool(format!("Failed to create MCP client: {}", e)))?;
 
+        // CRITICAL: Initialize the MCP client before use
+        mcp_client.initialize()
+            .await
+            .map_err(|e| AofError::tool(format!("Failed to initialize MCP client: {}", e)))?;
+
+        info!("MCP client initialized successfully");
+
         Ok(Arc::new(McpToolExecutor {
             client: Arc::new(mcp_client),
             tool_names: tool_names.to_vec(),

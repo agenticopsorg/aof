@@ -55,15 +55,14 @@ spec:
 
 Test it:
 ```bash
+# Interactive mode - recommended for testing
 aofctl run agent k8s-helper.yaml
+
+# Or with a single query
+aofctl run agent k8s-helper.yaml --input "How do I check if my deployment is healthy?"
 ```
 
-Try asking:
-```
-> How do I check if my deployment is healthy?
-```
-
-The agent will explain but can't actually run kubectl yet. Let's add that.
+The agent will explain what steps to follow, but can't actually run kubectl yet. Let's add that.
 
 ## Step 2: Add Instructions for Common Tasks
 

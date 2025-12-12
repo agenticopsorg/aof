@@ -173,10 +173,28 @@ impl GoogleModel {
 
     /// Parse Gemini response to ModelResponse
     fn parse_response(&self, response: GeminiResponse) -> AofResult<ModelResponse> {
-        let candidate = response
-            .candidates
-            .first()
-            .ok_or_else(|| AofError::model("No candidates in Gemini response"))?;
+        // Handle responses with missing or empty candidates (safety filters, errors, etc.)
+        let candidates = response.candidates.unwrap_or_default();
+
+        if candidates.is_empty() {
+            // Check if there's a safety/error in the response
+            if let Some(prompt_feedback) = response.prompt_feedback {
+                if !prompt_feedback.safety_ratings.is_empty() {
+                    let safety_info = prompt_feedback.safety_ratings
+                        .iter()
+                        .map(|r| format!("{}={:?}", r.category, r.probability))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(AofError::model(format!(
+                        "Content blocked by safety filter: {}",
+                        safety_info
+                    )));
+                }
+            }
+            return Err(AofError::model("No candidates in Gemini response - possible API error or safety filter"));
+        }
+
+        let candidate = candidates.first().unwrap();
 
         let content = candidate
             .content
@@ -301,7 +319,7 @@ impl Model for GoogleModel {
                 AofError::model(format!("Failed to parse Gemini response: {}", e))
             })?;
 
-        tracing::warn!("[GOOGLE] Response parsed successfully, candidates={}", gemini_response.candidates.len());
+        tracing::warn!("[GOOGLE] Response parsed successfully, candidates={}", gemini_response.candidates.as_ref().map(|c| c.len()).unwrap_or(0));
         self.parse_response(gemini_response)
     }
 
@@ -410,7 +428,8 @@ fn parse_gemini_stream_chunk(line: &str) -> Option<AofResult<StreamChunk>> {
         Err(e) => return Some(Err(AofError::model(format!("Failed to parse Gemini chunk: {}", e)))),
     };
 
-    let candidate = chunk.candidates.first()?;
+    let candidates = chunk.candidates.unwrap_or_default();
+    let candidate = candidates.first()?;
 
     // Handle content delta
     for part in &candidate.content.parts {
@@ -518,9 +537,12 @@ struct GeminiGenerationConfig {
 
 #[derive(Debug, Deserialize)]
 struct GeminiResponse {
-    candidates: Vec<GeminiCandidate>,
+    #[serde(default)]
+    candidates: Option<Vec<GeminiCandidate>>,
     #[serde(rename = "usageMetadata")]
     usage_metadata: Option<GeminiUsageMetadata>,
+    #[serde(rename = "promptFeedback")]
+    prompt_feedback: Option<GeminiPromptFeedback>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -540,9 +562,22 @@ struct GeminiUsageMetadata {
 
 #[derive(Debug, Deserialize)]
 struct GeminiStreamChunk {
-    candidates: Vec<GeminiCandidate>,
+    #[serde(default)]
+    candidates: Option<Vec<GeminiCandidate>>,
     #[serde(rename = "usageMetadata")]
     usage_metadata: Option<GeminiUsageMetadata>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminiPromptFeedback {
+    #[serde(rename = "safetyRatings", default)]
+    safety_ratings: Vec<GeminySafetyRating>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GeminySafetyRating {
+    category: String,
+    probability: String,
 }
 
 #[cfg(test)]
