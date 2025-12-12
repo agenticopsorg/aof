@@ -39,6 +39,8 @@ pub trait Model: Send + Sync {
 pub enum ModelProvider {
     Anthropic,
     OpenAI,
+    Google,
+    Groq,
     Bedrock,
     Azure,
     Ollama,

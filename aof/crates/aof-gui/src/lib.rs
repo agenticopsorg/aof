@@ -2,6 +2,7 @@
 // Integrates aof-core, aof-mcp, aof-llm, aof-memory with Tauri
 
 pub mod commands;
+pub mod db;
 pub mod state;
 
 use state::AppState;
@@ -14,7 +15,7 @@ pub fn run() {
     tracing_subscriber::registry()
         .with(
             tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "aof_gui=debug,aof_core=debug,aof_mcp=debug".into()),
+                .unwrap_or_else(|_| "aof_gui=debug,aof_core=debug,aof_mcp=debug,aof_runtime=warn,aof_llm=warn".into()),
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
@@ -22,16 +23,34 @@ pub fn run() {
     tracing::info!("Starting AOF Desktop v{}", env!("CARGO_PKG_VERSION"));
     tracing::info!("AOF Core v{}", aof_core::VERSION);
 
+    // Create app state
+    let app_state = AppState::new();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_store::Builder::new().build())
-        .manage(AppState::new())
+        .manage(app_state)
         .setup(|app| {
-            // DevTools can be opened manually with Cmd+Option+I (macOS) or F12 (Windows/Linux)
-            // #[cfg(debug_assertions)]
-            // {
-            //     let window = app.get_webview_window("main").unwrap();
-            //     window.open_devtools();
-            // }
+            let app_handle = app.handle().clone();
+
+            // Get the app data directory
+            let db_path = match app_handle.path().app_data_dir() {
+                Ok(dir) => dir.join("aof.db"),
+                Err(e) => {
+                    tracing::error!("Failed to get app data directory: {}", e);
+                    // Fallback to current directory
+                    std::path::PathBuf::from("aof.db")
+                }
+            };
+
+            tracing::info!("Database path: {:?}", db_path);
+
+            // Initialize database - block until complete
+            let state = app_handle.state::<AppState>();
+            tauri::async_runtime::block_on(async {
+                if let Err(e) = state.init_db(db_path).await {
+                    tracing::error!("Database initialization failed: {}", e);
+                }
+            });
 
             tracing::info!("AOF Desktop initialized successfully");
             Ok(())
@@ -61,6 +80,17 @@ pub fn run() {
             commands::mcp_list_tools,
             commands::mcp_call_tool,
             commands::mcp_get_tool,
+            // Database commands - MCP servers
+            commands::db_save_mcp_server,
+            commands::db_load_mcp_servers,
+            commands::db_delete_mcp_server,
+            commands::db_get_mcp_server,
+            // Database commands - Provider API keys
+            commands::db_save_provider_api_key,
+            commands::db_load_provider_api_keys,
+            commands::db_delete_provider_api_key,
+            commands::db_get_provider_api_key,
+            commands::db_get_provider_config,
             // Settings commands
             commands::settings_get,
             commands::settings_update,
@@ -69,6 +99,13 @@ pub fn run() {
             commands::settings_import,
             commands::provider_test_connection,
             commands::provider_list_models,
+            // Memory commands
+            commands::memory_get_entries,
+            // Integrations commands
+            commands::integrations_list,
+            commands::integrations_get_logs,
+            // Monitoring commands
+            commands::monitoring_get_metrics,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

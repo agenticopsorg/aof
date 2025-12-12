@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  Settings as SettingsIcon, Key, Palette, Activity,
+  Key, Palette, Activity,
   Save, RotateCcw, Download, Upload, CheckCircle, XCircle, Loader2
 } from 'lucide-react';
-import { toast, invokeWithToast } from '../lib/toast';
+import { invokeWithToast } from '../lib/toast';
 
 // Types matching Rust backend
 interface ProviderConfig {

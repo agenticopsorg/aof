@@ -3,9 +3,31 @@ use aof_core::AgentConfig;
 use aof_runtime::Runtime;
 use std::fs;
 use tracing::info;
+use crate::resources::ResourceType;
 
-/// Execute an agent with configuration and input
-pub async fn execute(config: &str, input: &str, output: &str) -> Result<()> {
+/// Execute a resource (agent, workflow, job) with configuration and input
+pub async fn execute(
+    resource_type: &str,
+    name_or_config: &str,
+    input: Option<&str>,
+    output: &str,
+) -> Result<()> {
+    // Parse resource type
+    let rt = ResourceType::from_str(resource_type)
+        .ok_or_else(|| anyhow::anyhow!("Unknown resource type: {}", resource_type))?;
+
+    match rt {
+        ResourceType::Agent => run_agent(name_or_config, input, output).await,
+        ResourceType::Workflow => run_workflow(name_or_config, input, output).await,
+        ResourceType::Job => run_job(name_or_config, input, output).await,
+        _ => {
+            anyhow::bail!("Resource type '{}' cannot be run directly", resource_type)
+        }
+    }
+}
+
+/// Run an agent with configuration
+async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()> {
     info!("Loading agent config from: {}", config);
 
     // Load and parse agent configuration
@@ -26,8 +48,9 @@ pub async fn execute(config: &str, input: &str, output: &str) -> Result<()> {
         .context("Failed to load agent")?;
 
     // Execute the agent
+    let input_str = input.unwrap_or("default input");
     let result = runtime
-        .execute(&agent_name, input)
+        .execute(&agent_name, input_str)
         .await
         .context("Failed to execute agent")?;
 
@@ -55,5 +78,27 @@ pub async fn execute(config: &str, input: &str, output: &str) -> Result<()> {
         }
     }
 
+    Ok(())
+}
+
+/// Run a workflow (placeholder)
+async fn run_workflow(name_or_config: &str, input: Option<&str>, output: &str) -> Result<()> {
+    println!("Run workflow - Not yet implemented");
+    println!("Workflow: {}", name_or_config);
+    if let Some(inp) = input {
+        println!("Input: {}", inp);
+    }
+    println!("Output format: {}", output);
+    Ok(())
+}
+
+/// Run a job (placeholder)
+async fn run_job(name_or_config: &str, input: Option<&str>, output: &str) -> Result<()> {
+    println!("Run job - Not yet implemented");
+    println!("Job: {}", name_or_config);
+    if let Some(inp) = input {
+        println!("Input: {}", inp);
+    }
+    println!("Output format: {}", output);
     Ok(())
 }

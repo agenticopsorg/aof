@@ -3,10 +3,7 @@
 use aof_core::tool::ToolDefinition;
 use aof_mcp::{McpClient, McpClientBuilder};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::sync::Arc;
 use tauri::{Emitter, State};
-use tokio::sync::RwLock;
 
 use crate::state::AppState;
 
@@ -300,5 +297,189 @@ pub async fn mcp_get_tool(
             .ok_or_else(|| format!("Tool {} not found", tool_name))
     } else {
         Err(format!("Connection {} not found", connection_id))
+    }
+}
+
+/// Auto-connect to MCP servers that provide the required tools
+/// This is called internally when an agent is run with tools configured
+pub async fn auto_connect_for_tools(
+    required_tools: &[String],
+    state: &AppState,
+    window: &tauri::Window,
+) -> Result<Vec<String>, String> {
+    if required_tools.is_empty() {
+        return Ok(vec![]);
+    }
+
+    tracing::info!("[AUTO_CONNECT] Checking for tools: {:?}", required_tools);
+
+    // Check if already have the tools connected
+    let connected_tools: Vec<String> = {
+        let connections = state.mcp_connections.read().await;
+        connections.values()
+            .flat_map(|c| c.tools.iter().map(|t| t.name.clone()))
+            .collect()
+    };
+
+    let missing_tools: Vec<&String> = required_tools.iter()
+        .filter(|t| !connected_tools.contains(t))
+        .collect();
+
+    if missing_tools.is_empty() {
+        tracing::info!("[AUTO_CONNECT] All required tools already connected");
+        return Ok(vec![]);
+    }
+
+    tracing::info!("[AUTO_CONNECT] Need to connect for tools: {:?}", missing_tools);
+
+    // Load saved MCP servers from database
+    let db = state.get_db().await?;
+    let rows = sqlx::query("SELECT * FROM mcp_servers")
+        .fetch_all(&db)
+        .await
+        .map_err(|e| format!("Failed to load MCP servers: {}", e))?;
+
+    // Find servers that might have the tools we need
+    let mut connected_server_ids = vec![];
+
+    for row in rows {
+        let server_id: String = sqlx::Row::get(&row, "id");
+        let server_name: String = sqlx::Row::get(&row, "name");
+        let server_command: String = sqlx::Row::get(&row, "command");
+        let server_args_json: String = sqlx::Row::get(&row, "args");
+        let server_tools_json: Option<String> = sqlx::Row::get(&row, "tools");
+
+        // Check if this server has the tools we need (from stored tools list)
+        let server_tools: Vec<String> = server_tools_json
+            .and_then(|s| serde_json::from_str(&s).ok())
+            .unwrap_or_default();
+
+        let has_needed_tools = missing_tools.iter()
+            .any(|t| server_tools.contains(t));
+
+        // Also check if server name matches a tool name (common pattern)
+        let name_matches_tool = missing_tools.iter()
+            .any(|t| server_name.to_lowercase().contains(&t.to_lowercase()) ||
+                     t.to_lowercase().contains(&server_name.to_lowercase()));
+
+        if !has_needed_tools && !name_matches_tool && !server_tools.is_empty() {
+            continue; // Skip this server, it doesn't have what we need
+        }
+
+        // Check if already connected
+        let already_connected = {
+            let connections = state.mcp_connections.read().await;
+            connections.values().any(|c| c.server_command == server_command)
+        };
+
+        if already_connected {
+            tracing::info!("[AUTO_CONNECT] Server {} already connected", server_name);
+            continue;
+        }
+
+        tracing::info!("[AUTO_CONNECT] Auto-connecting to server: {} ({})", server_name, server_command);
+
+        // Parse args
+        let args: Vec<String> = serde_json::from_str(&server_args_json).unwrap_or_default();
+
+        // Emit connecting event
+        let _ = window.emit("mcp-auto-connecting", serde_json::json!({
+            "server_name": server_name,
+            "server_command": server_command,
+        }));
+
+        // Connect to the server
+        match connect_mcp_server_internal(&server_command, args.clone(), state, window).await {
+            Ok(connection_id) => {
+                tracing::info!("[AUTO_CONNECT] Successfully connected to {}", server_name);
+                connected_server_ids.push(connection_id.clone());
+
+                // Update the database with discovered tools
+                if let Ok(tools) = get_connection_tools(&connection_id, state).await {
+                    let tools_json = serde_json::to_string(&tools).unwrap_or_else(|_| "[]".to_string());
+                    let _ = sqlx::query("UPDATE mcp_servers SET tools = ?, updated_at = ? WHERE id = ?")
+                        .bind(&tools_json)
+                        .bind(chrono::Utc::now().to_rfc3339())
+                        .bind(&server_id)
+                        .execute(&db)
+                        .await;
+                    tracing::info!("[AUTO_CONNECT] Updated server {} with discovered tools: {:?}", server_name, tools);
+                }
+            }
+            Err(e) => {
+                tracing::warn!("[AUTO_CONNECT] Failed to connect to {}: {}", server_name, e);
+                let _ = window.emit("mcp-auto-connect-failed", serde_json::json!({
+                    "server_name": server_name,
+                    "error": e,
+                }));
+            }
+        }
+    }
+
+    Ok(connected_server_ids)
+}
+
+/// Internal helper to connect to MCP server
+async fn connect_mcp_server_internal(
+    server_command: &str,
+    args: Vec<String>,
+    state: &AppState,
+    window: &tauri::Window,
+) -> Result<String, String> {
+    let connection_id = uuid::Uuid::new_v4().to_string();
+
+    // Build MCP client
+    let client = McpClientBuilder::new()
+        .stdio(server_command, args)
+        .build()
+        .map_err(|e| format!("Failed to create MCP client: {}", e))?;
+
+    // Initialize connection
+    client
+        .initialize()
+        .await
+        .map_err(|e| format!("Failed to initialize MCP connection: {}", e))?;
+
+    // Get available tools
+    let tools = client
+        .list_tools()
+        .await
+        .map_err(|e| format!("Failed to list MCP tools: {}", e))?;
+
+    let tools_count = tools.len();
+    let connected_at = chrono::Utc::now();
+
+    // Store connection
+    let connection = McpConnection {
+        id: connection_id.clone(),
+        server_command: server_command.to_string(),
+        client,
+        tools,
+        status: McpConnectionStatus::Connected,
+        connected_at: Some(connected_at),
+    };
+
+    {
+        let mut connections = state.mcp_connections.write().await;
+        connections.insert(connection_id.clone(), connection);
+    }
+
+    // Emit connected event
+    let _ = window.emit("mcp-connected", serde_json::json!({
+        "connection_id": connection_id,
+        "tools_count": tools_count,
+        "auto_connected": true,
+    }));
+
+    Ok(connection_id)
+}
+
+/// Get tool names from a connection
+async fn get_connection_tools(connection_id: &str, state: &AppState) -> Result<Vec<String>, String> {
+    let connections = state.mcp_connections.read().await;
+    if let Some(connection) = connections.get(connection_id) {
+        Ok(connection.tools.iter().map(|t| t.name.clone()).collect())
+    } else {
+        Err("Connection not found".to_string())
     }
 }

@@ -2,7 +2,6 @@
 
 use aof_core::AgentConfig;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
 use tauri::State;
 
 use crate::state::AppState;
@@ -255,19 +254,20 @@ pub async fn config_delete(
 #[tauri::command]
 pub async fn config_generate_example() -> Result<String, String> {
     let example = r#"# AOF Agent Configuration
+# Supports both flat format and Kubernetes-style format
+
 name: example-agent
 model: gemini-2.0-flash
 
-# System prompt defines agent behavior
+# System prompt defines agent behavior (also accepts "instructions:")
 system_prompt: |
   You are a helpful assistant that can answer questions
   and help with various tasks.
 
-# Available tools for the agent
-tools:
-  - read_file
-  - write_file
-  - execute_command
+# MCP tools - use tool names from your connected MCP servers
+# First connect to an MCP server in the MCP Tools tab, then add tool names here
+# Example: if you connect kubectl MCP server, add "kubectl" to the list
+tools: []
 
 # Execution settings
 max_iterations: 10
@@ -276,6 +276,22 @@ max_tokens: 4096
 
 # Optional memory backend
 # memory: vector
+
+# ---
+# Kubernetes-style format (alternative)
+# ---
+# apiVersion: aof.dev/v1
+# kind: Agent
+# metadata:
+#   name: k8s-helper
+# spec:
+#   model: gemini-2.0-flash
+#   instructions: |
+#     You are a Kubernetes expert. Help with kubectl commands.
+#   tools:
+#     - kubectl   # MCP tool name from connected server
+#   max_iterations: 10
+#   temperature: 0.7
 "#;
 
     Ok(example.to_string())

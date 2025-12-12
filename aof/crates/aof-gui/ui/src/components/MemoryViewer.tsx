@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
   Brain, Search, Trash2, Download, Calendar, Clock,
-  MessageSquare, AlertCircle, Loader2, Filter
+  MessageSquare, Loader2, Filter
 } from 'lucide-react';
 import { toast, invokeWithToast } from '../lib/toast';
 

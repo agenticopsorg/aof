@@ -8,6 +8,7 @@ use tauri::{Emitter, State};
 use uuid::Uuid;
 
 use crate::state::AppState;
+use crate::commands::mcp::auto_connect_for_tools;
 
 /// Agent run request
 #[derive(Debug, Deserialize)]
@@ -30,7 +31,8 @@ pub struct AgentStatusResponse {
     pub agent_id: String,
     pub name: String,
     pub status: AgentStatus,
-    pub output: Vec<String>,
+    pub output: Vec<String>,       // Status logs (legacy, kept for compatibility)
+    pub response: Option<String>,  // The actual LLM response
     pub metadata: Option<ExecutionMetadataResponse>,
     pub started_at: Option<String>,
     pub finished_at: Option<String>,
@@ -89,7 +91,8 @@ pub struct AgentRuntime {
     pub name: String,
     pub config: AgentConfig,
     pub status: AgentStatus,
-    pub output: Vec<String>,
+    pub output: Vec<String>,      // Legacy: status logs
+    pub response: Option<String>, // The actual LLM response
     pub metadata: Option<ExecutionMetadata>,
     pub started_at: Option<chrono::DateTime<chrono::Utc>>,
     pub finished_at: Option<chrono::DateTime<chrono::Utc>>,
@@ -110,28 +113,118 @@ pub async fn agent_run(
     let agent_id = Uuid::new_v4().to_string();
     let agent_name = config.name.clone();
 
+    // Auto-connect to MCP servers if tools are configured
+    if !config.tools.is_empty() {
+        tracing::info!("Agent {} requires tools: {:?}, checking auto-connect...", agent_name, config.tools);
+
+        // Emit event to frontend
+        let _ = window.emit(
+            "agent-output",
+            serde_json::json!({
+                "agent_id": agent_id,
+                "content": format!("Checking MCP connections for tools: {:?}", config.tools),
+                "timestamp": chrono::Utc::now().to_rfc3339(),
+            }),
+        );
+
+        match auto_connect_for_tools(&config.tools, state.inner(), &window).await {
+            Ok(connected) => {
+                if !connected.is_empty() {
+                    tracing::info!("Auto-connected {} MCP servers for tools", connected.len());
+                    let _ = window.emit(
+                        "agent-output",
+                        serde_json::json!({
+                            "agent_id": agent_id,
+                            "content": format!("Auto-connected {} MCP server(s) for tools", connected.len()),
+                            "timestamp": chrono::Utc::now().to_rfc3339(),
+                        }),
+                    );
+                }
+            }
+            Err(e) => {
+                tracing::warn!("Failed to auto-connect MCP servers: {}", e);
+                let _ = window.emit(
+                    "agent-output",
+                    serde_json::json!({
+                        "agent_id": agent_id,
+                        "content": format!("Warning: Could not auto-connect MCP servers: {}", e),
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                    }),
+                );
+            }
+        }
+    }
+
     // Determine provider from model name and get appropriate API key
     let (provider, api_key_var) = if config.model.starts_with("gemini") || config.model.starts_with("google/") {
-        ("google", "GOOGLE_API_KEY")
+        (ModelProvider::Google, "GOOGLE_API_KEY")
     } else if config.model.starts_with("claude") || config.model.starts_with("anthropic") {
-        ("anthropic", "ANTHROPIC_API_KEY")
-    } else if config.model.starts_with("gpt") || config.model.starts_with("openai") {
-        ("openai", "OPENAI_API_KEY")
-    } else if config.model.starts_with("llama") || config.model.starts_with("mistral") || config.model.starts_with("ollama") {
-        ("ollama", "OLLAMA_HOST") // Ollama doesn't need API key, just host URL
-    } else if config.model.contains("groq") {
-        ("groq", "GROQ_API_KEY")
+        (ModelProvider::Anthropic, "ANTHROPIC_API_KEY")
+    } else if config.model.starts_with("gpt") || config.model.starts_with("openai") || config.model.starts_with("o1") || config.model.starts_with("o3") {
+        (ModelProvider::OpenAI, "OPENAI_API_KEY")
+    } else if config.model.starts_with("llama") && !config.model.contains("groq") {
+        (ModelProvider::Ollama, "OLLAMA_HOST")
+    } else if config.model.starts_with("mistral") || config.model.starts_with("codellama") || config.model.starts_with("phi") {
+        (ModelProvider::Ollama, "OLLAMA_HOST")
+    } else if config.model.contains("groq") || config.model.contains("mixtral") {
+        (ModelProvider::Groq, "GROQ_API_KEY")
     } else {
         // Default to trying Google for unknown models
-        ("google", "GOOGLE_API_KEY")
+        (ModelProvider::Google, "GOOGLE_API_KEY")
     };
 
-    // Get API key from environment (skip for ollama)
-    let api_key = if provider == "ollama" {
+    // Get API key - first try database, then fall back to environment variable
+    let provider_name = match provider {
+        ModelProvider::Google => "google",
+        ModelProvider::Anthropic => "anthropic",
+        ModelProvider::OpenAI => "openai",
+        ModelProvider::Groq => "groq",
+        ModelProvider::Ollama => "ollama",
+        _ => "unknown",
+    };
+
+    let api_key = if provider == ModelProvider::Ollama {
         std::env::var("OLLAMA_HOST").unwrap_or_else(|_| "http://localhost:11434".to_string())
     } else {
-        std::env::var(api_key_var)
-            .map_err(|_| format!("{} environment variable not set. Please configure your API key for {} provider.", api_key_var, provider))?
+        // Try to get from database first
+        let db_key = if let Ok(db) = state.get_db().await {
+            tracing::info!("Checking database for {} API key...", provider_name);
+            match sqlx::query_scalar::<_, String>("SELECT api_key FROM provider_api_keys WHERE provider = ?")
+                .bind(provider_name)
+                .fetch_optional(&db)
+                .await
+            {
+                Ok(Some(key)) => {
+                    tracing::info!("✓ Found API key in database for {} (length: {})", provider_name, key.len());
+                    Some(key)
+                }
+                Ok(None) => {
+                    tracing::warn!("No API key found in database for {}", provider_name);
+                    None
+                }
+                Err(e) => {
+                    tracing::error!("Database query failed for {} API key: {}", provider_name, e);
+                    None
+                }
+            }
+        } else {
+            tracing::warn!("Could not get database connection");
+            None
+        };
+
+        // Fall back to environment variable if not in database
+        let final_key = if let Some(key) = db_key {
+            tracing::info!("Using API key from DATABASE for {}", provider_name);
+            Some(key)
+        } else if let Ok(env_key) = std::env::var(api_key_var) {
+            tracing::info!("Using API key from ENVIRONMENT ({}) for {} (length: {})", api_key_var, provider_name, env_key.len());
+            Some(env_key)
+        } else {
+            tracing::error!("No API key found for {} in database or environment ({})", provider_name, api_key_var);
+            None
+        };
+
+        final_key.ok_or_else(|| format!("No API key found for {} provider. Please configure your API key in Settings or set the {} environment variable.", provider_name, api_key_var))?
     };
 
     // Create agent runtime entry
@@ -140,7 +233,8 @@ pub async fn agent_run(
         name: agent_name.clone(),
         config: config.clone(),
         status: AgentStatus::Pending,
-        output: vec![format!("Initializing agent: {}", agent_name)],
+        output: vec![],  // Status logs (not shown in main output)
+        response: None,  // The actual LLM response
         metadata: None,
         started_at: Some(chrono::Utc::now()),
         finished_at: None,
@@ -171,7 +265,7 @@ pub async fn agent_run(
     );
 
     // Submit task to orchestrator
-    let handle = state.orchestrator.submit_task(task);
+    let _handle = state.orchestrator.submit_task(task);
 
     // Spawn background task for agent execution
     let state_clone = state.inner().clone();
@@ -185,6 +279,7 @@ pub async fn agent_run(
             config,
             input,
             api_key,
+            provider,
             state_clone,
             window_clone,
         )
@@ -204,6 +299,7 @@ async fn execute_agent_with_runtime(
     config: AgentConfig,
     input: String,
     api_key: String,
+    provider: ModelProvider,
     state: AppState,
     window: tauri::Window,
 ) {
@@ -232,7 +328,7 @@ async fn execute_agent_with_runtime(
     // Create LLM model
     let model_config = ModelConfig {
         model: config.model.clone(),
-        provider: ModelProvider::Anthropic,
+        provider,
         api_key: Some(api_key.clone()),
         endpoint: None,
         temperature: config.temperature,
@@ -243,50 +339,135 @@ async fn execute_agent_with_runtime(
     };
 
     let model = match ProviderFactory::create(model_config).await {
-        Ok(m) => m,
+        Ok(m) => {
+            tracing::info!("Successfully created model provider for {}", config.model);
+            let _ = window.emit(
+                "agent-output",
+                serde_json::json!({
+                    "agent_id": agent_id,
+                    "content": format!("Model provider created successfully for {}", config.model),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }),
+            );
+            m
+        }
         Err(e) => {
             let error_msg = format!("Failed to create model: {}", e);
+            tracing::error!("{}", error_msg);
             handle_execution_error(&agent_id, &error_msg, &state, &window).await;
             return;
         }
     };
 
-    // Create tool executor if tools are specified in config
+    // Create tool executor using MCP connections from app state
     let tool_executor: Option<std::sync::Arc<dyn aof_core::ToolExecutor>> = if !config.tools.is_empty() {
-        // Create MCP-based tool executor
-        use aof_mcp::McpClientBuilder;
         use aof_core::{ToolDefinition, ToolInput, Tool};
         use async_trait::async_trait;
 
-        match McpClientBuilder::new()
-            .stdio(
-                "npx",
-                vec!["-y".to_string(), "@modelcontextprotocol/server-everything".to_string()],
-            )
-            .build()
-        {
-            Ok(mcp_client) => {
-                // Create a simple MCP tool executor
-                struct McpToolExecutor {
-                    client: std::sync::Arc<aof_mcp::McpClient>,
-                    tool_names: Vec<String>,
+        // Get all available tools from connected MCP servers
+        let mcp_connections = state.mcp_connections.read().await;
+        tracing::warn!("[TOOL_SETUP] MCP connections count: {}", mcp_connections.len());
+
+        if mcp_connections.is_empty() {
+            tracing::warn!("[TOOL_SETUP] No MCP servers connected! Tools will not be available.");
+            // Emit warning to frontend
+            let _ = window.emit(
+                "agent-output",
+                serde_json::json!({
+                    "agent_id": agent_id,
+                    "content": "⚠️ No MCP servers connected. Tools will not be available. Connect MCP servers in the MCP Tools tab.",
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }),
+            );
+            None
+        } else {
+            // Collect all tool definitions from connected MCP servers
+            let mut all_tools: Vec<ToolDefinition> = Vec::new();
+            let mut tool_to_connection: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+
+            for (conn_id, connection) in mcp_connections.iter() {
+                for tool in &connection.tools {
+                    // Only include tools that are in the config
+                    if config.tools.contains(&tool.name) || config.tools.is_empty() {
+                        all_tools.push(tool.clone());
+                        tool_to_connection.insert(tool.name.clone(), conn_id.clone());
+                    }
+                }
+            }
+
+            if all_tools.is_empty() {
+                let available = mcp_connections.values().flat_map(|c| c.tools.iter().map(|t| &t.name)).collect::<Vec<_>>();
+                tracing::warn!("[TOOL_SETUP] Requested tools {:?} not found. Available: {:?}", config.tools, available);
+                let _ = window.emit(
+                    "agent-output",
+                    serde_json::json!({
+                        "agent_id": agent_id,
+                        "content": format!("⚠️ Requested tools {:?} not found in connected MCP servers. Available tools: {:?}",
+                            config.tools,
+                            available
+                        ),
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                    }),
+                );
+                None
+            } else {
+                // Log available tools
+                let _ = window.emit(
+                    "agent-output",
+                    serde_json::json!({
+                        "agent_id": agent_id,
+                        "content": format!("Found {} MCP tools available: {:?}",
+                            all_tools.len(),
+                            all_tools.iter().map(|t| &t.name).collect::<Vec<_>>()
+                        ),
+                        "timestamp": chrono::Utc::now().to_rfc3339(),
+                    }),
+                );
+
+                // Create multi-connection tool executor
+                struct McpMultiToolExecutor {
+                    connections: std::sync::Arc<tokio::sync::RwLock<std::collections::HashMap<String, crate::commands::mcp::McpConnection>>>,
+                    tool_to_connection: std::collections::HashMap<String, String>,
+                    all_tools: Vec<ToolDefinition>,
                 }
 
                 #[async_trait]
-                impl aof_core::ToolExecutor for McpToolExecutor {
+                impl aof_core::ToolExecutor for McpMultiToolExecutor {
                     async fn execute_tool(
                         &self,
                         name: &str,
                         input: ToolInput,
                     ) -> aof_core::AofResult<aof_core::ToolResult> {
+                        tracing::warn!("[MCP_EXECUTOR] execute_tool called: name={}", name);
                         let start = std::time::Instant::now();
-                        let result = self
-                            .client
+
+                        // Find which connection has this tool
+                        let conn_id = self.tool_to_connection.get(name)
+                            .ok_or_else(|| {
+                                tracing::error!("[MCP_EXECUTOR] Tool '{}' not found in tool_to_connection map", name);
+                                aof_core::AofError::tool(format!("Tool '{}' not found in any connected MCP server", name))
+                            })?;
+
+                        tracing::warn!("[MCP_EXECUTOR] Found tool in connection: {}", conn_id);
+
+                        let connections = self.connections.read().await;
+                        let connection = connections.get(conn_id)
+                            .ok_or_else(|| {
+                                tracing::error!("[MCP_EXECUTOR] Connection '{}' no longer available", conn_id);
+                                aof_core::AofError::tool(format!("MCP connection '{}' no longer available", conn_id))
+                            })?;
+
+                        tracing::warn!("[MCP_EXECUTOR] Calling MCP tool: {} with args: {:?}", name, input.arguments);
+                        let result = connection.client
                             .call_tool(name, input.arguments)
                             .await
-                            .map_err(|e| aof_core::AofError::tool(format!("MCP tool call failed: {}", e)))?;
+                            .map_err(|e| {
+                                tracing::error!("[MCP_EXECUTOR] MCP tool call failed: {}", e);
+                                aof_core::AofError::tool(format!("MCP tool call failed: {}", e))
+                            })?;
 
                         let execution_time_ms = start.elapsed().as_millis() as u64;
+                        tracing::warn!("[MCP_EXECUTOR] Tool completed in {}ms", execution_time_ms);
 
                         Ok(aof_core::ToolResult {
                             success: true,
@@ -297,17 +478,11 @@ async fn execute_agent_with_runtime(
                     }
 
                     fn list_tools(&self) -> Vec<ToolDefinition> {
-                        self.tool_names
-                            .iter()
-                            .map(|name| ToolDefinition {
-                                name: name.clone(),
-                                description: format!("MCP tool: {}", name),
-                                parameters: serde_json::json!({
-                                    "type": "object",
-                                    "properties": {},
-                                }),
-                            })
-                            .collect()
+                        tracing::warn!("[MCP_EXECUTOR] list_tools called, returning {} tools", self.all_tools.len());
+                        for tool in &self.all_tools {
+                            tracing::warn!("[MCP_EXECUTOR] Available tool: {}", tool.name);
+                        }
+                        self.all_tools.clone()
                     }
 
                     fn get_tool(&self, _name: &str) -> Option<std::sync::Arc<dyn Tool>> {
@@ -315,14 +490,11 @@ async fn execute_agent_with_runtime(
                     }
                 }
 
-                Some(std::sync::Arc::new(McpToolExecutor {
-                    client: std::sync::Arc::new(mcp_client),
-                    tool_names: config.tools.clone(),
+                Some(std::sync::Arc::new(McpMultiToolExecutor {
+                    connections: state.mcp_connections.clone(),
+                    tool_to_connection,
+                    all_tools,
                 }))
-            }
-            Err(e) => {
-                eprintln!("Warning: Failed to create MCP client for tools: {}", e);
-                None
             }
         }
     } else {
@@ -348,21 +520,66 @@ async fn execute_agent_with_runtime(
     let mut ctx = AgentContext::new(&input);
     ctx.add_message(MessageRole::User, &input);
 
-    // Emit progress update
+    // Emit progress update with config info for debugging
     let _ = window.emit(
         "agent-output",
         serde_json::json!({
             "agent_id": agent_id,
-            "content": "Calling LLM model...",
+            "content": format!("Calling LLM model: {} (provider: {:?})", config.model, provider),
             "timestamp": chrono::Utc::now().to_rfc3339(),
         }),
     );
 
+    tracing::info!("Agent {} executing with model {} ({:?})", agent_id, config.model, provider);
+    tracing::info!("System prompt: {:?}", config.system_prompt.as_ref().map(|s| s.chars().take(100).collect::<String>()));
+    tracing::info!("Tools: {:?}", config.tools);
+
     // Execute agent
     let start_time = std::time::Instant::now();
+    tracing::info!("Starting executor.execute()...");
+
+    let _ = window.emit(
+        "agent-output",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "content": "Sending request to LLM API...",
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        }),
+    );
+
     let result = executor.execute(&mut ctx).await;
 
-    let execution_time = start_time.elapsed().as_millis() as u64;
+    let elapsed = start_time.elapsed().as_millis();
+
+    // Detailed logging based on result
+    match &result {
+        Ok(output) => {
+            tracing::info!("executor.execute() SUCCESS in {}ms, output length: {}", elapsed, output.len());
+        }
+        Err(e) => {
+            tracing::error!("executor.execute() FAILED in {}ms: {:?}", elapsed, e);
+            // Also emit the error to the frontend immediately
+            let _ = window.emit(
+                "agent-output",
+                serde_json::json!({
+                    "agent_id": agent_id,
+                    "content": format!("ERROR: {}", e),
+                    "timestamp": chrono::Utc::now().to_rfc3339(),
+                }),
+            );
+        }
+    }
+
+    let _ = window.emit(
+        "agent-output",
+        serde_json::json!({
+            "agent_id": agent_id,
+            "content": format!("LLM API call completed in {}ms", elapsed),
+            "timestamp": chrono::Utc::now().to_rfc3339(),
+        }),
+    );
+
+    let execution_time = elapsed as u64;
 
     // Handle execution result
     match result {
@@ -392,11 +609,7 @@ async fn execute_agent_with_runtime(
                 let mut agents = state.agents.write().await;
                 if let Some(runtime) = agents.get_mut(&agent_id) {
                     runtime.status = AgentStatus::Completed;
-                    runtime.output.push(format!(
-                        "[{}] Agent completed successfully",
-                        chrono::Utc::now().format("%H:%M:%S")
-                    ));
-                    runtime.output.push(output.clone());
+                    runtime.response = Some(output.clone()); // Store actual response separately
                     runtime.finished_at = Some(chrono::Utc::now());
                     runtime.metadata = Some(ctx.metadata.clone());
                 }
@@ -508,6 +721,7 @@ pub async fn agent_status(
             name: runtime.name.clone(),
             status: runtime.status.clone(),
             output: runtime.output.clone(),
+            response: runtime.response.clone(),
             metadata: runtime.metadata.clone().map(|m| m.into()),
             started_at: runtime.started_at.map(|t| t.to_rfc3339()),
             finished_at: runtime.finished_at.map(|t| t.to_rfc3339()),
@@ -530,6 +744,7 @@ pub async fn agent_list(state: State<'_, AppState>) -> Result<Vec<AgentStatusRes
             name: runtime.name.clone(),
             status: runtime.status.clone(),
             output: runtime.output.clone(),
+            response: runtime.response.clone(),
             metadata: runtime.metadata.clone().map(|m| m.into()),
             started_at: runtime.started_at.map(|t| t.to_rfc3339()),
             finished_at: runtime.finished_at.map(|t| t.to_rfc3339()),

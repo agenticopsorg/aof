@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import {
-  MessageCircle, Send, Smartphone, Globe, Check, X,
+  MessageCircle, Send, Smartphone, Globe, Check,
   AlertCircle, Loader2, Eye, EyeOff, RefreshCw, Activity
 } from 'lucide-react';
 import { toast, invokeWithToast } from '../lib/toast';
@@ -69,19 +69,6 @@ export function PlatformIntegrations() {
     } catch (error) {
       console.error('Failed to load logs:', error);
     }
-  };
-
-  const handleUpdateIntegration = async (id: string, config: any) => {
-    await invokeWithToast(
-      'integrations_update',
-      { id, config },
-      {
-        loading: 'Updating integration...',
-        success: 'Integration updated successfully',
-        error: 'Failed to update integration',
-      }
-    );
-    await loadIntegrations();
   };
 
   const handleToggleIntegration = async (id: string, enabled: boolean) => {

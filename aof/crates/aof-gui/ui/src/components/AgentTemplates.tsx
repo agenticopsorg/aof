@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileCode, Search, Loader2, ChevronRight } from 'lucide-react';
+import { FileCode, Search, ChevronRight } from 'lucide-react';
 import { toast } from '../lib/toast';
 
 interface Template {
@@ -15,10 +15,12 @@ const TEMPLATES: Template[] = [
   {
     id: 'k8s-helper',
     name: 'Kubernetes Helper',
-    description: 'Expert at kubectl commands, pod troubleshooting, and K8s concepts',
+    description: 'Expert at kubectl commands, pod troubleshooting, and K8s concepts. Requires kubectl MCP server connected.',
     category: 'devops',
     tags: ['kubernetes', 'kubectl', 'troubleshooting'],
-    yaml: `apiVersion: aof.dev/v1
+    yaml: `# Kubernetes Helper Agent
+# Requires: Connect kubectl MCP server first in MCP Tools tab
+apiVersion: aof.dev/v1
 kind: Agent
 metadata:
   name: k8s-helper
@@ -27,72 +29,74 @@ spec:
   instructions: |
     You are a helpful Kubernetes expert. Help users with kubectl commands,
     troubleshoot pod issues, and explain K8s concepts clearly.
+
+    When the user asks you to run kubectl commands, use the kubectl tool.
   tools:
-    - type: Shell
-      config:
-        allowed_commands: ["kubectl"]
+    - kubectl  # MCP tool name - connect kubectl MCP server first
   temperature: 0.7
   max_iterations: 10`,
   },
   {
     id: 'code-reviewer',
     name: 'Code Reviewer',
-    description: 'Reviews pull requests and provides constructive feedback',
+    description: 'Reviews code and provides constructive feedback',
     category: 'development',
-    tags: ['code-review', 'github', 'quality'],
-    yaml: `apiVersion: aof.dev/v1
+    tags: ['code-review', 'quality'],
+    yaml: `# Code Reviewer Agent
+# No MCP tools required - uses LLM analysis
+apiVersion: aof.dev/v1
 kind: Agent
 metadata:
   name: code-reviewer
 spec:
   model: gemini-2.0-flash
   instructions: |
-    You are an experienced code reviewer. Analyze code for:
+    You are an experienced code reviewer. When given code, analyze it for:
     - Code quality and best practices
     - Security vulnerabilities
     - Performance issues
     - Readability and maintainability
     Provide constructive, actionable feedback.
-  tools:
-    - type: GitHub
-      config:
-        permissions: ["read:repo", "write:pr"]
+  tools: []  # No external tools needed
   temperature: 0.3
   max_iterations: 5`,
   },
   {
-    id: 'slack-bot',
-    name: 'Slack Support Bot',
-    description: 'Auto-responds to common questions in Slack channels',
-    category: 'support',
-    tags: ['slack', 'support', 'automation'],
-    yaml: `apiVersion: aof.dev/v1
+    id: 'shell-assistant',
+    name: 'Shell Assistant',
+    description: 'Helps with shell commands. Requires bash MCP server connected.',
+    category: 'devops',
+    tags: ['shell', 'bash', 'commands'],
+    yaml: `# Shell Assistant Agent
+# Requires: Connect bash MCP server first in MCP Tools tab
+apiVersion: aof.dev/v1
 kind: Agent
 metadata:
-  name: slack-support-bot
+  name: shell-assistant
 spec:
   model: gemini-2.0-flash
   instructions: |
-    You are a helpful support bot. Answer common questions and provide
-    guidance. If you cannot help, suggest contacting a human.
+    You are a shell command expert. Help users with:
+    - Running shell commands
+    - Explaining command output
+    - Writing shell scripts
+    - Troubleshooting system issues
+
+    When the user asks you to run commands, use the bash tool.
   tools:
-    - type: HTTP
-      config:
-        allowed_domains: ["api.slack.com"]
-  trigger:
-    type: Slack
-    config:
-      channel: "#support"
-  temperature: 0.7
-  max_iterations: 3`,
+    - bash  # MCP tool name - connect bash MCP server first
+  temperature: 0.5
+  max_iterations: 10`,
   },
   {
     id: 'incident-responder',
     name: 'Incident Responder',
-    description: 'Diagnoses issues and suggests remediation steps',
+    description: 'Diagnoses issues and suggests remediation steps. Requires kubectl MCP server.',
     category: 'devops',
     tags: ['incident', 'sre', 'troubleshooting'],
-    yaml: `apiVersion: aof.dev/v1
+    yaml: `# Incident Responder Agent
+# Requires: Connect kubectl MCP server first
+apiVersion: aof.dev/v1
 kind: Agent
 metadata:
   name: incident-responder
@@ -100,20 +104,12 @@ spec:
   model: gemini-2.0-flash
   instructions: |
     You are an SRE expert. When an incident occurs:
-    1. Diagnose the root cause
+    1. Diagnose the root cause using available tools
     2. Suggest remediation steps
     3. Provide commands to execute
     Ask for human approval before executing destructive operations.
   tools:
-    - type: Shell
-      config:
-        allowed_commands: ["kubectl", "docker", "systemctl"]
-    - type: HTTP
-      config:
-        allowed_domains: ["*"]
-  memory:
-    enabled: true
-    ttl: 3600
+    - kubectl  # Connect kubectl MCP server in MCP Tools tab
   temperature: 0.2
   max_iterations: 15`,
   },
@@ -123,7 +119,9 @@ spec:
     description: 'Generates comprehensive documentation from code',
     category: 'development',
     tags: ['documentation', 'markdown', 'api-docs'],
-    yaml: `apiVersion: aof.dev/v1
+    yaml: `# Documentation Writer Agent
+# No MCP tools required
+apiVersion: aof.dev/v1
 kind: Agent
 metadata:
   name: doc-writer
@@ -136,33 +134,26 @@ spec:
     - Usage examples
     - Best practices
     - Troubleshooting guides
+  tools: []
   temperature: 0.5
   max_iterations: 8`,
   },
   {
-    id: 'log-analyzer',
-    name: 'Log Analyzer',
-    description: 'Analyzes logs to identify patterns and issues',
-    category: 'devops',
-    tags: ['logs', 'debugging', 'analysis'],
-    yaml: `apiVersion: aof.dev/v1
-kind: Agent
-metadata:
-  name: log-analyzer
-spec:
-  model: gemini-2.0-flash
-  instructions: |
-    You are a log analysis expert. Analyze logs to:
-    - Identify error patterns
-    - Detect anomalies
-    - Suggest fixes
-    - Provide root cause analysis
-  tools:
-    - type: Shell
-      config:
-        allowed_commands: ["grep", "awk", "jq"]
-  temperature: 0.3
-  max_iterations: 10`,
+    id: 'general-assistant',
+    name: 'General Assistant',
+    description: 'A helpful general-purpose assistant for any task',
+    category: 'support',
+    tags: ['general', 'assistant', 'help'],
+    yaml: `# General Assistant Agent
+# No MCP tools required
+name: general-assistant
+model: gemini-2.0-flash
+system_prompt: |
+  You are a helpful, friendly assistant. Answer questions clearly
+  and help with a variety of tasks. Be concise but thorough.
+tools: []
+temperature: 0.7
+max_iterations: 10`,
   },
 ];
 

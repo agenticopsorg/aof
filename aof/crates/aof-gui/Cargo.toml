@@ -47,7 +47,13 @@ aof-mcp = { path = "../aof-mcp" }
 aof-llm = { path = "../aof-llm" }
 aof-memory = { path = "../aof-memory" }
 aof-runtime = { path = "../aof-runtime" }
+
+# Tauri plugins
 tauri-plugin-store = "2.4.1"
+tauri-plugin-sql = { version = "2.1", features = ["sqlite"] }
+
+# SQL
+sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio"] }
 
 [build-dependencies]
 tauri-build = { version = "2.0", features = [] }
