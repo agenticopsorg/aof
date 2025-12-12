@@ -86,7 +86,7 @@ spec:
 
 ```bash
 # Interactive chat mode
-aofctl agent run hello-agent.yaml
+aofctl run agent hello-agent.yaml
 
 # You'll see:
 > Agent 'hello-assistant' is ready. Type your message (or 'exit' to quit):
@@ -128,7 +128,7 @@ spec:
 Save this as `k8s-agent.yaml` and run:
 
 ```bash
-aofctl agent run k8s-agent.yaml
+aofctl run agent k8s-agent.yaml
 ```
 
 Now try:

@@ -286,22 +286,25 @@ AOF's CLI mirrors kubectl for familiarity:
 
 ```bash
 # Apply configuration
-aofctl agent apply -f agent.yaml
+aofctl apply -f agent.yaml
 
-# Get resources
-aofctl agent get my-agent
+# List all agents
+aofctl get agents
+
+# Get specific agent
+aofctl get agent my-agent
 
 # Describe details
-aofctl agent describe my-agent
+aofctl describe agent my-agent
 
 # View logs
-aofctl agent logs my-agent
+aofctl logs agent my-agent
+
+# Run interactive chat
+aofctl run agent my-agent
 
 # Delete resource
-aofctl agent delete my-agent
-
-# Interactive chat
-aofctl agent chat my-agent
+aofctl delete agent my-agent
 ```
 
 ## Next Steps

@@ -51,7 +51,7 @@ spec:
 
 Test it:
 ```bash
-aofctl agent run k8s-helper.yaml
+aofctl run agent k8s-helper.yaml
 ```
 
 Try asking:
@@ -105,7 +105,7 @@ spec:
 
 Test it again:
 ```bash
-aofctl agent run k8s-helper.yaml
+aofctl run agent k8s-helper.yaml
 ```
 
 Now try:
@@ -290,13 +290,13 @@ Instead of running interactively, deploy it as a persistent agent:
 
 ```bash
 # Apply the configuration
-aofctl agent apply -f k8s-helper.yaml
+aofctl apply -f k8s-helper.yaml
 
 # Verify it's running
-aofctl agent get k8s-helper
+aofctl get agent k8s-helper
 
 # Check status
-aofctl agent describe k8s-helper
+aofctl describe agent k8s-helper
 ```
 
 ## Step 7: Interact with the Agent
@@ -304,27 +304,24 @@ aofctl agent describe k8s-helper
 Now you can interact via CLI:
 
 ```bash
-# Chat interactively
-aofctl agent chat k8s-helper
-
-# Single query
-aofctl agent chat k8s-helper "Show me failing pods"
+# Run agent interactively
+aofctl run agent k8s-helper
 
 # Or use exec for one-shot commands
-aofctl agent exec k8s-helper "Scale the nginx deployment to 3 replicas"
+aofctl exec agent k8s-helper -- "kubectl get pods"
 ```
 
 ## Step 8: Monitor and Debug
 
 ```bash
 # View agent logs
-aofctl agent logs k8s-helper
+aofctl logs agent k8s-helper
 
 # Follow logs in real-time
-aofctl agent logs k8s-helper -f
+aofctl logs agent k8s-helper --follow
 
 # Get detailed status
-aofctl agent describe k8s-helper
+aofctl describe agent k8s-helper
 
 # Check memory usage
 ls -lh k8s-helper-memory.json
