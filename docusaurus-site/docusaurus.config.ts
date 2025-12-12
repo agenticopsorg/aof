@@ -22,8 +22,8 @@ const config: Config = {
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'gshah', // Usually your GitHub org/user name.
-  projectName: 'my-framework', // Usually your repo name.
+  organizationName: 'agenticopsorg', // Usually your GitHub org/user name.
+  projectName: 'aof', // Usually your repo name.
 
   onBrokenLinks: 'throw',
 
@@ -44,7 +44,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/gshah/my-framework/tree/docs/docusaurus-site/',
+            'https://github.com/agenticopsorg/aof/tree/main/docusaurus-site/',
         },
         blog: false, // Disable blog for now
         theme: {
@@ -86,7 +86,7 @@ const config: Config = {
           label: 'Examples',
         },
         {
-          href: 'https://github.com/gshah/my-framework',
+          href: 'https://github.com/agenticopsorg/aof',
           label: 'GitHub',
           position: 'right',
         },
@@ -138,20 +138,20 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/gshah/my-framework',
+              href: 'https://github.com/agenticopsorg/aof',
             },
             {
               label: 'Issues',
-              href: 'https://github.com/gshah/my-framework/issues',
+              href: 'https://github.com/agenticopsorg/aof/issues',
             },
             {
               label: 'Discussions',
-              href: 'https://github.com/gshah/my-framework/discussions',
+              href: 'https://github.com/agenticopsorg/aof/discussions',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} Opsflow.sh. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} OpsFlow LLC. Built with Docusaurus.`,
     },
     prism: {
       theme: prismThemes.github,
