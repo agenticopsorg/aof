@@ -5,7 +5,11 @@ Get up and running with your first AI agent in 5 minutes.
 ## Prerequisites
 
 ### Required
-- **API Key**: Get one from [OpenAI](https://platform.openai.com/api-keys), [Anthropic](https://console.anthropic.com/), or use [Ollama](https://ollama.ai/) locally
+- **API Key**: Get one from:
+  - [OpenAI](https://platform.openai.com/api-keys) (ChatGPT, GPT-4)
+  - [Anthropic](https://console.anthropic.com/) (Claude)
+  - [Google AI Studio](https://aistudio.google.com/apikey) (Gemini)
+  - Or use [Ollama](https://ollama.ai/) locally (no key needed)
 - **Terminal**: Any Unix shell (bash, zsh, fish)
 
 ### Optional
@@ -58,6 +62,9 @@ export OPENAI_API_KEY=sk-...
 # OR Anthropic
 export ANTHROPIC_API_KEY=sk-ant-...
 
+# OR Google Gemini
+export GOOGLE_API_KEY=AIza...
+
 # OR Ollama (runs locally, no key needed)
 # Just install: brew install ollama && ollama serve
 ```
@@ -76,11 +83,17 @@ kind: Agent
 metadata:
   name: hello-assistant
 spec:
-  model: openai:gpt-4
+  model: google:gemini-2.0-flash
   instructions: |
     You are a friendly assistant that helps DevOps engineers.
     Keep responses concise and practical.
 ```
+
+> **Note**: You can use any supported model:
+> - `google:gemini-2.0-flash` - Google Gemini (requires `GOOGLE_API_KEY`)
+> - `openai:gpt-4` - OpenAI GPT-4 (requires `OPENAI_API_KEY`)
+> - `anthropic:claude-3-5-sonnet-20241022` - Anthropic Claude (requires `ANTHROPIC_API_KEY`)
+> - `ollama:llama3` - Local Ollama (no API key needed)
 
 ### Step 4: Run Your Agent
 
@@ -175,6 +188,7 @@ The agent can't use tools you don't have installed. Either:
 
 ### "Model not supported"
 Check your provider:model format:
+- ✅ `google:gemini-2.0-flash`
 - ✅ `openai:gpt-4`
 - ✅ `anthropic:claude-3-5-sonnet-20241022`
 - ✅ `ollama:llama3`
