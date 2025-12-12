@@ -72,16 +72,16 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
 fn print_banner() {
     let version = env!("CARGO_PKG_VERSION");
     println!();
-    println!("╔════════════════════════════════════════╦═════════════╗");
-    println!("║                                        ║             ║");
-    println!("║    A O F  :  AGENTIC OPS FRAMEWORK     ║  v{}      ║", version);
-    println!("║    ═ ═ ═  :  DEVOPS AUTOMATION        ║             ║");
-    println!("║                                        ║             ║");
-    println!("║         https://aof.sh                ║             ║");
-    println!("║                                        ║             ║");
-    println!("║     Commands: help, exit/quit         ║             ║");
-    println!("║                                        ║             ║");
-    println!("╚════════════════════════════════════════╩═════════════╝");
+    println!("╔═══════════════════════════════════════════╦═══════════╗");
+    println!("║                                           ║           ║");
+    println!("║  A O F  :  AGENTIC OPS FRAMEWORK          ║ v{}      ║", version);
+    println!("║  ═ ═ ═  :  DEVOPS AUTOMATION             ║           ║");
+    println!("║                                           ║           ║");
+    println!("║      https://aof.sh                       ║           ║");
+    println!("║                                           ║           ║");
+    println!("║  Commands: help, exit/quit                ║           ║");
+    println!("║                                           ║           ║");
+    println!("╚═══════════════════════════════════════════╩═══════════╝");
     println!();
 }
 
