@@ -95,15 +95,12 @@ get_download_url() {
     local version="$1"
     local platform="$2"
 
-    # Convert version format (v0.1.0 -> 0.1.0)
-    version="${version#v}"
-
-    # Build filename
-    local binary_name="aofctl-${version}-${platform}"
+    # Build filename (without version, matching GitHub release assets)
+    local binary_name="aofctl-${platform}"
 
     # GitHub releases URL pattern
     local base_url="https://github.com/$REPO/releases/download"
-    local tag="v${version}"
+    local tag="$version"
 
     echo "${base_url}/${tag}/${binary_name}"
 }
