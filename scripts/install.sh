@@ -7,7 +7,7 @@ set -e
 
 # Configuration
 REPO="agenticopsorg/aof"
-INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local/bin}"
 GITHUB_RELEASE_API="https://api.github.com/repos/$REPO/releases"
 VERSION="${1:-latest}"
 VERBOSE="${VERBOSE:-0}"
@@ -287,7 +287,7 @@ while [[ $# -gt 0 ]]; do
             echo ""
             echo "Options:"
             echo "  --version VERSION      Install specific version (default: latest)"
-            echo "  --install-dir DIR      Installation directory (default: ~/.local/bin)"
+            echo "  --install-dir DIR      Installation directory (default: /usr/local/bin)"
             echo "  --verbose              Enable verbose output"
             echo "  --help                 Show this help message"
             echo ""
