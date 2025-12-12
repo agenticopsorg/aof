@@ -1054,7 +1054,7 @@ name = "aof-triggers"
 version = "0.1.0"
 edition = "2021"
 authors = ["AOF Contributors"]
-license = "MIT OR Apache-2.0"
+license = "Apache-2.0"
 description = "Unified messaging trigger system for AOF"
 
 [dependencies]

@@ -517,8 +517,8 @@ cargo tauri build
 
 ## Licensing
 
-**License**: Dual MIT OR Apache-2.0
-**Dependencies**: All compatible with MIT/Apache-2.0
+**License**: Apache-2.0
+**Dependencies**: All compatible with Apache-2.0
 
 ---
 
