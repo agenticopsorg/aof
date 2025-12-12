@@ -28,11 +28,6 @@ jobs:
             artifact_name: aofctl
             asset_name: aofctl-linux-x86_64
 
-          - os: ubuntu-latest
-            target: aarch64-unknown-linux-gnu
-            artifact_name: aofctl
-            asset_name: aofctl-linux-aarch64
-
           # macOS
           - os: macos-latest
             target: x86_64-apple-darwin
@@ -136,7 +131,6 @@ jobs:
 
           **Supported platforms:**
           - Linux x86_64
-          - Linux aarch64 (ARM64)
           - macOS x86_64 (Intel)
           - macOS aarch64 (Apple Silicon)
           - Windows x86_64
