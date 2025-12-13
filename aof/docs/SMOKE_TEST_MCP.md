@@ -130,8 +130,9 @@ Create or use `testframework/smoke-test-agent.yaml`:
 
 ```yaml
 name: smoke-test-agent
-model: openai:gpt-4
-system_prompt: |
+model: gemini-2.0-flash
+provider: google
+instructions: |
   You are a helpful assistant. You have access to tools to echo messages,
   do simple math, and get system information.
 

@@ -85,27 +85,21 @@ cat examples/agents/slack-support-bot.yaml
 Key sections:
 
 ```yaml
-# The AI model to use
-model:
-  provider: anthropic
-  name: claude-3-haiku-20240307  # Fast, cost-effective
-  temperature: 0.7  # Friendly responses
+name: slack-support-bot
+model: claude-3-5-sonnet-20241022
+provider: anthropic
 
-# The MCP tool that connects to Slack
-mcp_servers:
-  - name: slack
-    command: npx
-    args:
-      - slack-mcp-server
-    env:
-      SLACK_BOT_TOKEN: ${SLACK_BOT_TOKEN}
+instructions: |
+  You are a helpful customer support specialist.
+  Assist users with their inquiries professionally and efficiently.
 
-# What triggers the agent
-triggers:
-  - type: slack
-    events:
-      - message.im  # Direct messages
-      - app_mention  # @mentions
+tools:
+  - slack
+  - web_search
+
+max_iterations: 10
+temperature: 0.7
+max_tokens: 2000
 ```
 
 ## Step 5: Run the Agent (1 minute)
@@ -223,10 +217,10 @@ cp examples/agents/slack-support-bot.yaml my-agents/custom-support-bot.yaml
 nano my-agents/custom-support-bot.yaml
 ```
 
-Change the system prompt to match your business:
+Change the instructions to match your business:
 
 ```yaml
-system_prompt: |
+instructions: |
   You are a customer support specialist for [YOUR COMPANY].
 
   Our products: [LIST YOUR PRODUCTS]
@@ -238,58 +232,73 @@ system_prompt: |
   2. [ISSUE 2]: [SOLUTION]
 ```
 
-### 🔧 Add More MCP Tools
+### 🔧 Add More Tools
 
-Expand capabilities with additional MCP servers:
-
-```bash
-# Install more MCP servers
-npm install -g @modelcontextprotocol/server-github
-npm install -g @modelcontextprotocol/server-postgres
-npm install -g kubectl-mcp-server
-
-# Add to your agent config
-mcp_servers:
-  - name: slack
-    command: npx
-    args: [slack-mcp-server]
-
-  - name: github  # New!
-    command: npx
-    args: [@modelcontextprotocol/server-github]
-    env:
-      GITHUB_TOKEN: ${GITHUB_TOKEN}
-```
-
-### 📊 Enable Memory
-
-Give your agent conversation memory:
+Expand capabilities with additional tools:
 
 ```yaml
-memory:
-  enabled: true
-  type: short_term
-  max_messages: 30
-  context_window: 12h  # Remember for 12 hours
+name: github-assistant
+model: claude-3-5-sonnet-20241022
+provider: anthropic
+
+instructions: |
+  You are a GitHub assistant. Help users with repository operations,
+  code reviews, and pull request management.
+
+tools:
+  - github
+  - web_search
+  - slack
+
+max_iterations: 10
+temperature: 0.7
 ```
 
-### 🎯 Add Interactive Buttons
+### 📊 Configure Agent Behavior
 
-Create rich interactions:
+Fine-tune agent behavior for your use case:
 
 ```yaml
-interactive:
-  enabled: true
-  components:
-    - type: buttons
-      actions:
-        - id: escalate
-          label: "Talk to Human"
-          style: danger
+name: memory-enabled-agent
+model: claude-3-5-sonnet-20241022
+provider: anthropic
 
-        - id: resolved
-          label: "Issue Resolved ✓"
-          style: primary
+instructions: |
+  You are a helpful assistant with access to conversation context.
+
+tools:
+  - web_search
+
+max_iterations: 5
+temperature: 0.5
+max_tokens: 1500
+```
+
+### 🎯 Different Models for Different Tasks
+
+Choose the right model for your use case:
+
+```yaml
+# Fast and cost-effective
+name: haiku-support-bot
+model: claude-3-5-haiku-20241022
+provider: anthropic
+temperature: 0.5
+
+# Advanced reasoning and code
+name: sonnet-code-reviewer
+model: claude-3-5-sonnet-20241022
+provider: anthropic
+temperature: 0.2
+
+# Google Gemini with tools
+name: k8s-helper
+model: google:gemini-2.5-flash
+instructions: |
+  You are a Kubernetes expert assistant.
+tools:
+  - shell
+  - kubectl
 ```
 
 ## Troubleshooting
@@ -330,13 +339,17 @@ aof mcp test slack
 
 ### "Rate limit exceeded"
 
-```bash
+```yaml
 # Use a cheaper/faster model for testing
-# Edit your agent YAML:
-model:
-  name: claude-3-haiku-20240307  # Faster, cheaper
-  # OR
-  name: gpt-3.5-turbo  # OpenAI budget option
+name: budget-agent
+model: claude-3-5-haiku-20241022  # Faster, cheaper
+provider: anthropic
+temperature: 0.5
+
+instructions: "You are a helpful assistant"
+tools:
+  - web_search
+max_iterations: 5
 ```
 
 ## Example Workflows
@@ -408,10 +421,11 @@ model:
 
 | Use Case | Model | Reason |
 |----------|-------|--------|
-| High-volume support | Claude Haiku / GPT-3.5 | Fast, cheap |
-| Code review | GPT-4 / Claude Sonnet | Quality analysis |
-| Simple Q&A | GPT-3.5 | Cost-effective |
-| Complex reasoning | Claude Sonnet | Best quality |
+| High-volume support | claude-3-5-haiku-20241022 | Fast, cheap |
+| Code review | claude-3-5-sonnet-20241022 | Quality analysis |
+| Simple Q&A | claude-3-5-haiku-20241022 | Cost-effective |
+| Complex reasoning | claude-3-5-sonnet-20241022 | Best quality |
+| Kubernetes/CLI | google:gemini-2.5-flash | Tool execution |
 
 ### 2. Optimize Temperature
 
