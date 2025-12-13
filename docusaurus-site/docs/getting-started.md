@@ -71,15 +71,16 @@ export ANTHROPIC_API_KEY=sk-ant-...
 Create a file called `hello-agent.yaml`:
 
 ```yaml
-apiVersion: aof.dev/v1
-kind: Agent
-metadata:
-  name: hello-assistant
-spec:
-  model: openai:gpt-4
-  instructions: |
-    You are a friendly assistant that helps DevOps engineers.
-    Keep responses concise and practical.
+name: hello-assistant
+model: claude-3-5-sonnet-20241022
+provider: anthropic
+
+instructions: |
+  You are a friendly assistant that helps DevOps engineers.
+  Keep responses concise and practical.
+
+max_iterations: 10
+temperature: 0.7
 ```
 
 ### Step 4: Run Your Agent
@@ -103,26 +104,23 @@ Your agent should respond with a clear explanation. If you see a response, congr
 
 ## Add Some Tools
 
-Let's make the agent more useful by adding shell access:
+Let's make the agent more useful by adding kubectl and shell access:
 
 ```yaml
-apiVersion: aof.dev/v1
-kind: Agent
-metadata:
-  name: k8s-helper
-spec:
-  model: openai:gpt-4
-  instructions: |
-    You are a Kubernetes expert assistant. Help users run kubectl commands
-    and troubleshoot their clusters. Always explain what commands do before running them.
+name: k8s-helper
+model: google:gemini-2.5-flash
+provider: google
 
-  tools:
-    - type: Shell
-      config:
-        allowed_commands:
-          - kubectl
-          - helm
-        working_directory: /tmp
+instructions: |
+  You are a Kubernetes expert assistant. Help users run kubectl commands
+  and troubleshoot their clusters. Always explain what commands do before running them.
+
+tools:
+  - shell
+  - kubectl
+
+max_iterations: 5
+temperature: 0.7
 ```
 
 Save this as `k8s-agent.yaml` and run:
@@ -174,11 +172,12 @@ The agent can't use tools you don't have installed. Either:
 2. Remove it from `allowed_commands`
 
 ### "Model not supported"
-Check your provider:model format:
-- ✅ `openai:gpt-4`
-- ✅ `anthropic:claude-3-5-sonnet-20241022`
-- ✅ `ollama:llama3`
-- ❌ `gpt-4` (missing provider)
+Check your model format:
+- ✅ `claude-3-5-sonnet-20241022` (with `provider: anthropic`)
+- ✅ `gpt-4-turbo` (with `provider: openai`)
+- ✅ `google:gemini-2.5-flash` (combined format)
+- ✅ `llama3` (with `provider: ollama`)
+- ❌ `gpt-4` (missing provider or incomplete model name)
 
 ## Getting Help
 
