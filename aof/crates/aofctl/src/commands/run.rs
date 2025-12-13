@@ -12,7 +12,7 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Wrap, Gauge, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Paragraph, Wrap, Gauge, Scrollbar, ScrollbarOrientation, ScrollbarState, BarChart, BarGroup, Bar},
     text::{Line, Span},
     style::{Modifier, Color, Style},
     layout::{Layout, Direction, Alignment, Constraint},
@@ -144,6 +144,7 @@ struct AppState {
     output_tokens: u32,
     context_window: u32, // Max context window for model
     chat_scroll_offset: u16, // Scroll offset for chat history
+    show_greeting: bool, // Show greeting screen on startup
 }
 
 impl AppState {
@@ -178,6 +179,7 @@ impl AppState {
             output_tokens: 0,
             context_window,
             chat_scroll_offset: 0,
+            show_greeting: true,
         }
     }
 
@@ -305,6 +307,13 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
             let evt = event::read()?;
             match evt {
                 Event::Key(key) => {
+                    // If showing greeting, dismiss it on any key press
+                    if app_state.show_greeting {
+                        app_state.show_greeting = false;
+                        terminal.draw(|f| ui(f, agent_name, &app_state))?;
+                        continue;
+                    }
+
                     match key.code {
                         KeyCode::Char('c') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
                             break;
@@ -445,8 +454,166 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     Ok(())
 }
 
+/// Render the welcome/greeting screen with bar charts
+fn render_greeting(f: &mut Frame, agent_name: &str, model_name: &str, tools: &[String]) {
+    let size = f.size();
+
+    // Color palette inspired by professional DevOps tools
+    let colors = vec![
+        Color::LightMagenta,  // Pink
+        Color::LightGreen,    // Green
+        Color::Yellow,        // Yellow
+        Color::LightBlue,     // Blue
+        Color::LightCyan,     // Cyan
+        Color::LightRed,      // Red
+    ];
+
+    // Main layout
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .margin(2)
+        .constraints([
+            Constraint::Length(3),     // Title
+            Constraint::Min(20),       // Charts area
+            Constraint::Length(4),     // Instructions
+        ])
+        .split(size);
+
+    // Title with branding
+    let title_lines = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                "   ⚙️  Agentic Ops Framework v0.1.11",
+                Style::default()
+                    .fg(Color::White)
+                    .add_modifier(Modifier::BOLD),
+            ),
+        ]),
+        Line::from(""),
+    ];
+    let title = Paragraph::new(title_lines)
+        .alignment(Alignment::Center)
+        .style(Style::default());
+    f.render_widget(title, chunks[0]);
+
+    // Charts area - split into three columns
+    let chart_chunks = Layout::default()
+        .direction(Direction::Horizontal)
+        .constraints([
+            Constraint::Percentage(33),
+            Constraint::Percentage(33),
+            Constraint::Percentage(34),
+        ])
+        .split(chunks[1]);
+
+    // Chart 1: Model Capabilities
+    let model_chart = BarChart::default()
+        .block(
+            Block::default()
+                .title(" Model Capabilities ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(colors[0]))
+        )
+        .data(
+            BarGroup::default()
+                .label("Features".into())
+                .bars(&[
+                    Bar::default().value(80).label("Speed".into()).style(Style::default().fg(colors[0])),
+                    Bar::default().value(92).label("Accuracy".into()).style(Style::default().fg(colors[1])),
+                    Bar::default().value(1000000).label("Context".into()).style(Style::default().fg(colors[2])),
+                ])
+        )
+        .bar_width(3)
+        .bar_gap(1)
+        .max(1000000)
+        .style(Style::default().fg(Color::White));
+    f.render_widget(model_chart, chart_chunks[0]);
+
+    // Chart 2: Tools Available
+    let tools_len = tools.len() as u64;
+    let tool_chart = BarChart::default()
+        .block(
+            Block::default()
+                .title(" Available Tools ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(colors[3]))
+        )
+        .data(
+            BarGroup::default()
+                .label("Tools".into())
+                .bars(&[
+                    Bar::default()
+                        .value(tools_len.min(10))
+                        .label(format!("{}", tools_len).into())
+                        .style(Style::default().fg(colors[3])),
+                ])
+        )
+        .bar_width(8)
+        .max(10)
+        .style(Style::default().fg(Color::White));
+    f.render_widget(tool_chart, chart_chunks[1]);
+
+    // Chart 3: System Status
+    let status_chart = BarChart::default()
+        .block(
+            Block::default()
+                .title(" System Status ")
+                .title_alignment(Alignment::Center)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Rounded)
+                .border_style(Style::default().fg(colors[5]))
+        )
+        .data(
+            BarGroup::default()
+                .label("Ready".into())
+                .bars(&[
+                    Bar::default().value(100).label("Status".into()).style(Style::default().fg(colors[4])),
+                ])
+        )
+        .bar_width(8)
+        .max(100)
+        .style(Style::default().fg(Color::White));
+    f.render_widget(status_chart, chart_chunks[2]);
+
+    // Instructions at the bottom
+    let instructions = vec![
+        Line::from(""),
+        Line::from(vec![
+            Span::styled(
+                format!("Agent: {}", agent_name),
+                Style::default().fg(Color::Gray),
+            ),
+            Span::raw(" │ "),
+            Span::styled(
+                format!("Model: {}", model_name),
+                Style::default().fg(Color::Gray),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled(
+                "Press any key to begin... ",
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+            ),
+        ]),
+    ];
+    let instructions_para = Paragraph::new(instructions)
+        .alignment(Alignment::Center)
+        .style(Style::default());
+    f.render_widget(instructions_para, chunks[2]);
+}
+
 /// Render the TUI with elegant professional styling for DevOps engineers
 fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
+    // Show greeting screen if first launch
+    if app.show_greeting {
+        return render_greeting(f, agent_name, &app.model_name, &app.tools);
+    }
+
     let tools_str = if app.tools.is_empty() {
         "none".to_string()
     } else {
