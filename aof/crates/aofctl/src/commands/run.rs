@@ -162,19 +162,13 @@ impl AppState {
 
         // Create greeting message with ASCII art
         let greeting = r#"
-···············································
-:                                             :
-:   ████╗  ████╗ ████████╗                    :
-:  ██╔═██╗██╔═██╗██╔═════╝                    :
-:  ██████║██║ ██║█████╗                       :
-:  ██╔═██║██║ ██║██╔══╝                       :
-:  ██║ ██║╚████╔╝██║                          :
-:  ╚═╝ ╚═╝ ╚═══╝ ╚═╝                          :
-:                                             :
-:        Agentic Ops Framework                :
-:              aof.sh                         :
-:                                             :
-···············································"#;
+  ███   ███   ███████
+ █   █ █   █     █
+ █████ █   █     █
+ █   █  ███      █
+
+Agentic Ops Framework
+aof.sh"#;
 
         let mut chat_history = Vec::new();
         chat_history.push(("system".to_string(), greeting.to_string()));
