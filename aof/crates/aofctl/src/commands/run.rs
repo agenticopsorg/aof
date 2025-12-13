@@ -12,7 +12,7 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Wrap, LineGauge},
+    widgets::{Block, Borders, Paragraph, Wrap, Gauge},
     text::{Line, Span},
     style::{Modifier, Color, Style},
     layout::{Layout, Direction, Alignment, Constraint},
@@ -209,6 +209,12 @@ impl AppState {
             _ => "◐",
         }
     }
+
+    fn update_token_count(&mut self, text: &str) {
+        // Rough estimate: ~4 characters per token
+        let estimated_tokens = (text.len() / 4) as u32;
+        self.output_tokens = self.output_tokens.saturating_add(estimated_tokens);
+    }
 }
 
 /// Run agent in interactive REPL mode with two-column TUI
@@ -300,6 +306,9 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
                         } else {
                             // Execute agent with timer updates during execution
                             app_state.chat_history.push(("user".to_string(), trimmed.to_string()));
+                            // Update input tokens based on user query length
+                            let input_tokens_estimate = (trimmed.len() / 4) as u32;
+                            app_state.input_tokens = app_state.input_tokens.saturating_add(input_tokens_estimate);
                             app_state.agent_busy = true;
                             app_state.last_error = None;
                             app_state.execution_start = Some(Instant::now());
@@ -318,7 +327,15 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
                                     result = &mut exec_future => {
                                         match result {
                                             Ok(response) => {
-                                                app_state.chat_history.push(("assistant".to_string(), response));
+                                                if response.is_empty() {
+                                                    let error_msg = "Error: Empty response from agent".to_string();
+                                                    app_state.chat_history.push(("error".to_string(), error_msg.clone()));
+                                                    app_state.last_error = Some(error_msg);
+                                                } else {
+                                                    // Update output tokens based on response length
+                                                    app_state.update_token_count(&response);
+                                                    app_state.chat_history.push(("assistant".to_string(), response));
+                                                }
                                             }
                                             Err(e) => {
                                                 let error_msg = format!("Error: {}", e);
@@ -536,7 +553,7 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
 
     f.render_widget(logs_para, right_panel[0]);
 
-    // Bottom row - Context Stats with LineGauge
+    // Bottom row - Context Stats
     let context_used = app.input_tokens + app.output_tokens;
     let context_percentage = if app.context_window > 0 {
         (context_used as f64 / app.context_window as f64) * 100.0
@@ -544,7 +561,8 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
         0.0
     };
 
-    let gauge = LineGauge::default()
+    // Create gauge for visual representation
+    let gauge = Gauge::default()
         .block(
             Block::default()
                 .title(Span::styled(
@@ -556,10 +574,12 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
                 .border_type(ratatui::widgets::BorderType::Thick)
                 .border_style(Style::default().fg(primary_white))
         )
-        .gauge_style(Style::default().fg(Color::White))
-        .line_set(ratatui::symbols::line::THICK)
+        .gauge_style(Style::default().fg(Color::Green))
         .ratio(context_percentage / 100.0)
-        .label(format!("{} / {} tokens ({:.1}%)", context_used, app.context_window, context_percentage));
+        .label(Span::raw(format!(
+            "  IN: {} │ OUT: {} │ TOTAL: {} / {} ({:.1}%)",
+            app.input_tokens, app.output_tokens, context_used, app.context_window, context_percentage
+        )));
 
     f.render_widget(gauge, right_panel[1]);
 
