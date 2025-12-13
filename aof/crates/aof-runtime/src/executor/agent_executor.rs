@@ -310,14 +310,50 @@ impl AgentExecutor {
                 }
 
                 StopReason::ToolUse => {
+                    // Log tool calls for visibility
+                    info!("→ TOOL CALLS: {}", tool_calls_buffer.iter()
+                        .map(|tc| tc.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(", "));
+
+                    for tool_call in &tool_calls_buffer {
+                        let args_str = serde_json::to_string(&tool_call.arguments)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        info!("  • {} {}", tool_call.name, args_str);
+                    }
+
                     // Execute tools and emit events
                     debug!("Executing {} tool calls", tool_calls_buffer.len());
                     let tool_results = self.execute_tools_streaming(&tool_calls_buffer, &stream_tx).await?;
 
                     ctx.metadata.tool_calls += tool_results.len();
 
-                    // Add tool results to context
+                    // Add tool results to context and log them
                     for (tool_call, result) in tool_calls_buffer.iter().zip(tool_results.iter()) {
+                        // Log tool result
+                        if result.success {
+                            let result_summary = match &result.data {
+                                serde_json::Value::String(s) => {
+                                    if s.len() > 100 {
+                                        format!("{}...", &s[..100])
+                                    } else {
+                                        s.clone()
+                                    }
+                                }
+                                other => {
+                                    let s = other.to_string();
+                                    if s.len() > 100 {
+                                        format!("{}...", &s[..100])
+                                    } else {
+                                        s
+                                    }
+                                }
+                            };
+                            info!("✓ {}: {}", tool_call.name, result_summary);
+                        } else {
+                            info!("✗ {}: {}", tool_call.name, result.error.as_deref().unwrap_or("Unknown error"));
+                        }
+
                         let agent_result = aof_core::AgentToolResult {
                             tool_name: tool_call.name.clone(),
                             result: result.data.clone(),
@@ -510,14 +546,50 @@ impl AgentExecutor {
                 }
 
                 StopReason::ToolUse => {
+                    // Log tool calls for visibility
+                    info!("→ TOOL CALLS: {}", response.tool_calls.iter()
+                        .map(|tc| tc.name.clone())
+                        .collect::<Vec<_>>()
+                        .join(", "));
+
+                    for tool_call in &response.tool_calls {
+                        let args_str = serde_json::to_string(&tool_call.arguments)
+                            .unwrap_or_else(|_| "{}".to_string());
+                        info!("  • {} {}", tool_call.name, args_str);
+                    }
+
                     // Execute tools
                     debug!("Executing {} tool calls", response.tool_calls.len());
                     let tool_results = self.execute_tools(&response.tool_calls).await?;
 
                     context.metadata.tool_calls += tool_results.len();
 
-                    // Add tool results to context
+                    // Add tool results to context and log them
                     for (tool_call, result) in response.tool_calls.iter().zip(tool_results.iter()) {
+                        // Log tool result
+                        if result.success {
+                            let result_summary = match &result.data {
+                                serde_json::Value::String(s) => {
+                                    if s.len() > 100 {
+                                        format!("{}...", &s[..100])
+                                    } else {
+                                        s.clone()
+                                    }
+                                }
+                                other => {
+                                    let s = other.to_string();
+                                    if s.len() > 100 {
+                                        format!("{}...", &s[..100])
+                                    } else {
+                                        s
+                                    }
+                                }
+                            };
+                            info!("✓ {}: {}", tool_call.name, result_summary);
+                        } else {
+                            info!("✗ {}: {}", tool_call.name, result.error.as_deref().unwrap_or("Unknown error"));
+                        }
+
                         // Convert tool result to agent tool result
                         let agent_result = aof_core::AgentToolResult {
                             tool_name: tool_call.name.clone(),
