@@ -5,6 +5,7 @@ use std::fs;
 use std::io::{self, IsTerminal, Write};
 use std::sync::{Arc, Mutex};
 use std::sync::mpsc::{channel, Receiver, Sender};
+use tokio::sync::mpsc as tokio_mpsc;
 use tracing::info;
 use crate::resources::ResourceType;
 use ratatui::{
@@ -136,10 +137,16 @@ struct AppState {
     message_count: usize,
     spinner_state: u8,
     log_receiver: Receiver<String>,
+    model_name: String,
+    tools: Vec<String>,
+    execution_result_rx: tokio_mpsc::Receiver<Result<String, String>>,
 }
 
 impl AppState {
-    fn new(log_receiver: Receiver<String>) -> Self {
+    fn new(log_receiver: Receiver<String>, model_name: String, tools: Vec<String>) -> Self {
+        let (tx, rx) = tokio_mpsc::channel(1);
+        let _ = tx; // Drop sender since we only use the receiver
+
         Self {
             chat_history: Vec::new(),
             current_input: String::new(),
@@ -151,6 +158,9 @@ impl AppState {
             message_count: 0,
             spinner_state: 0,
             log_receiver,
+            model_name,
+            tools,
+            execution_result_rx: rx,
         }
     }
 
@@ -188,6 +198,17 @@ impl AppState {
 
 /// Run agent in interactive REPL mode with two-column TUI
 async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &str) -> Result<()> {
+    // Extract model and tools from runtime
+    let model_name = runtime
+        .get_agent(agent_name)
+        .map(|agent| agent.config().model.clone())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    let tools = runtime
+        .get_agent(agent_name)
+        .map(|agent| agent.config().tools.clone())
+        .unwrap_or_default();
+
     // Create log channel
     let (log_tx, log_rx) = channel::<String>();
 
@@ -227,7 +248,7 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     let mut terminal = Terminal::new(backend)?;
 
     // Initialize app state with log receiver
-    let mut app_state = AppState::new(log_rx);
+    let mut app_state = AppState::new(log_rx, model_name, tools);
     let should_quit = Arc::new(Mutex::new(false));
 
     // Add welcome message
@@ -262,29 +283,51 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
                             app_state.chat_history.push(("system".to_string(),
                                 "Available: help, exit, quit. Type normally to chat with agent.".to_string()));
                         } else {
-                            // Execute agent
+                            // Execute agent with timer updates during execution
                             app_state.chat_history.push(("user".to_string(), trimmed.to_string()));
                             app_state.agent_busy = true;
                             app_state.last_error = None;
                             app_state.execution_start = Some(Instant::now());
                             app_state.message_count = app_state.chat_history.len();
 
-                            // Draw busy state
+                            // Draw busy state before execution
                             terminal.draw(|f| ui(f, agent_name, &app_state))?;
 
-                            // Execute
-                            match runtime.execute(agent_name, trimmed).await {
-                                Ok(result) => {
-                                    app_state.chat_history.push(("assistant".to_string(), result));
-                                }
-                                Err(e) => {
-                                    let error_msg = format!("Error: {}", e);
-                                    app_state.chat_history.push(("error".to_string(), error_msg.clone()));
-                                    app_state.last_error = Some(error_msg);
+                            // Execute with periodic UI updates using select! for timer
+                            let input_str = trimmed.to_string();
+                            let mut exec_future = Box::pin(runtime.execute(agent_name, &input_str));
+                            let mut timer_handle = tokio::time::interval(std::time::Duration::from_millis(100));
+
+                            loop {
+                                tokio::select! {
+                                    result = &mut exec_future => {
+                                        match result {
+                                            Ok(response) => {
+                                                app_state.chat_history.push(("assistant".to_string(), response));
+                                            }
+                                            Err(e) => {
+                                                let error_msg = format!("Error: {}", e);
+                                                app_state.chat_history.push(("error".to_string(), error_msg.clone()));
+                                                app_state.last_error = Some(error_msg);
+                                            }
+                                        }
+                                        app_state.agent_busy = false;
+                                        app_state.update_execution_time();
+                                        break;
+                                    }
+                                    _ = timer_handle.tick() => {
+                                        // Update timer and spinner while execution is happening
+                                        app_state.next_spinner();
+                                        app_state.update_execution_time();
+
+                                        // Consume any new logs
+                                        app_state.consume_logs();
+
+                                        // Redraw to show timer updates
+                                        terminal.draw(|f| ui(f, agent_name, &app_state))?;
+                                    }
                                 }
                             }
-                            app_state.agent_busy = false;
-                            app_state.update_execution_time();
                         }
 
                         app_state.current_input.clear();
@@ -300,7 +343,7 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
             }
         }
 
-        // Update animation state for spinner
+        // Update animation state for spinner during idle time
         if app_state.agent_busy {
             app_state.next_spinner();
             app_state.update_execution_time();
@@ -328,6 +371,12 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
 
 /// Render the TUI with elegant professional styling for DevOps engineers
 fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
+    let tools_str = if app.tools.is_empty() {
+        "none".to_string()
+    } else {
+        app.tools.iter().take(3).cloned().collect::<Vec<_>>().join(", ")
+    };
+
     // Minimalist black and white color scheme
     let primary_white = Color::White;
 
@@ -409,13 +458,19 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
         chat_lines.push(Line::from(input_spans));
     }
 
+    // Calculate scroll to keep input visible at bottom
+    let visible_height = chunks[0].height.saturating_sub(3) as usize; // Account for borders and padding
+    let total_lines = chat_lines.len();
+    let scroll_offset = if total_lines > visible_height {
+        total_lines.saturating_sub(visible_height)
+    } else {
+        0
+    };
+
     let chat_para = Paragraph::new(chat_lines)
         .block(chat_block)
         .wrap(Wrap { trim: true })
-        .scroll((
-            (app.chat_history.len() as u16).saturating_sub(chunks[0].height.saturating_sub(3) / 2),
-            0,
-        ));
+        .scroll((scroll_offset as u16, 0));
 
     f.render_widget(chat_para, chunks[0]);
 
@@ -463,15 +518,19 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
     // Footer metrics bar
     let metrics_text = if app.agent_busy {
         format!(
-            "  ⧖ {:>5}ms  │  {} {} messages  │  Status: Active",
+            "  ⧖ {:>5}ms  │  {} {} messages  │  Model: {}  │  Tools: {}  │  Status: Active",
             app.execution_time_ms,
             app.get_spinner(),
-            app.message_count / 2
+            app.message_count / 2,
+            app.model_name,
+            tools_str
         )
     } else {
         format!(
-            "  ✓ Completed  │  {} messages  │  Last execution: {}ms",
+            "  ✓ Completed  │  {} messages  │  Model: {}  │  Tools: {}  │  Last execution: {}ms",
             app.message_count / 2,
+            app.model_name,
+            tools_str,
             app.execution_time_ms
         )
     };
