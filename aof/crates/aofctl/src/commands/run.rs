@@ -12,7 +12,7 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Wrap},
+    widgets::{Block, Borders, Paragraph, Wrap, LineGauge},
     text::{Line, Span},
     style::{Modifier, Color, Style},
     layout::{Layout, Direction, Alignment, Constraint},
@@ -140,12 +140,24 @@ struct AppState {
     model_name: String,
     tools: Vec<String>,
     execution_result_rx: tokio_mpsc::Receiver<Result<String, String>>,
+    input_tokens: u32,
+    output_tokens: u32,
+    context_window: u32, // Max context window for model
 }
 
 impl AppState {
     fn new(log_receiver: Receiver<String>, model_name: String, tools: Vec<String>) -> Self {
         let (tx, rx) = tokio_mpsc::channel(1);
         let _ = tx; // Drop sender since we only use the receiver
+
+        // Set context window based on model
+        let context_window = match model_name.as_str() {
+            "google:gemini-2.5-flash" => 1000000, // 1M tokens
+            "google:gemini-2.0-flash" => 1000000,
+            "openai:gpt-4-turbo" => 128000,
+            "openai:gpt-4" => 8192,
+            _ => 128000, // default
+        };
 
         Self {
             chat_history: Vec::new(),
@@ -161,6 +173,9 @@ impl AppState {
             model_name,
             tools,
             execution_result_rx: rx,
+            input_tokens: 0,
+            output_tokens: 0,
+            context_window,
         }
     }
 
@@ -474,7 +489,13 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
 
     f.render_widget(chat_para, chunks[0]);
 
-    // Right panel - System Logs with elegance
+    // Split right panel into two rows: logs (80%) and stats (20%)
+    let right_panel = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([Constraint::Percentage(80), Constraint::Percentage(20)])
+        .split(chunks[1]);
+
+    // Top row - System Logs
     let logs_block = Block::default()
         .title(Span::styled(
             " SYSTEM LOG ",
@@ -500,7 +521,7 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
                 Style::default().fg(Color::Gray)
             };
 
-            let trimmed = log.chars().take(chunks[1].width.saturating_sub(4) as usize).collect::<String>();
+            let trimmed = log.chars().take(right_panel[0].width.saturating_sub(4) as usize).collect::<String>();
             Line::from(Span::styled(trimmed, style))
         })
         .collect();
@@ -509,11 +530,38 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
         .block(logs_block)
         .wrap(Wrap { trim: true })
         .scroll((
-            (app.logs.len() as u16).saturating_sub(chunks[1].height.saturating_sub(3) / 2),
+            (app.logs.len() as u16).saturating_sub(right_panel[0].height.saturating_sub(3) / 2),
             0,
         ));
 
-    f.render_widget(logs_para, chunks[1]);
+    f.render_widget(logs_para, right_panel[0]);
+
+    // Bottom row - Context Stats with LineGauge
+    let context_used = app.input_tokens + app.output_tokens;
+    let context_percentage = if app.context_window > 0 {
+        (context_used as f64 / app.context_window as f64) * 100.0
+    } else {
+        0.0
+    };
+
+    let gauge = LineGauge::default()
+        .block(
+            Block::default()
+                .title(Span::styled(
+                    " CONTEXT USAGE ",
+                    Style::default().fg(primary_white).add_modifier(Modifier::BOLD),
+                ))
+                .title_alignment(Alignment::Left)
+                .borders(Borders::ALL)
+                .border_type(ratatui::widgets::BorderType::Thick)
+                .border_style(Style::default().fg(primary_white))
+        )
+        .gauge_style(Style::default().fg(Color::White))
+        .line_set(ratatui::symbols::line::THICK)
+        .ratio(context_percentage / 100.0)
+        .label(format!("{} / {} tokens ({:.1}%)", context_used, app.context_window, context_percentage));
+
+    f.render_widget(gauge, right_panel[1]);
 
     // Footer metrics bar
     let metrics_text = if app.agent_busy {
