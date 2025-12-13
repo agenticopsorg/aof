@@ -12,7 +12,7 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Wrap, Gauge, Scrollbar, ScrollbarOrientation, ScrollbarState},
+    widgets::{Block, Borders, Paragraph, Wrap, Gauge, Scrollbar, ScrollbarOrientation, ScrollbarState, BarChart, BarGroup, Bar},
     text::{Line, Span},
     style::{Modifier, Color, Style},
     layout::{Layout, Direction, Alignment, Constraint},
@@ -160,8 +160,23 @@ impl AppState {
             _ => 128000, // default
         };
 
+        // Create greeting message with ASCII art
+        let greeting = r#"
+████╗  ████╗ ████████╗
+██╔═██╗██╔═██╗██╔═════╝
+██████║██║ ██║█████╗
+██╔═██║██║ ██║██╔══╝
+██║ ██║╚████╔╝██║
+╚═╝ ╚═╝ ╚═══╝ ╚═╝
+
+Agentic Ops Framework
+aof.sh"#;
+
+        let mut chat_history = Vec::new();
+        chat_history.push(("system".to_string(), greeting.to_string()));
+
         Self {
-            chat_history: Vec::new(),
+            chat_history,
             current_input: String::new(),
             logs: Vec::new(),
             agent_busy: false,
@@ -286,11 +301,11 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     let mut app_state = AppState::new(log_rx, model_name, tools);
     let should_quit = Arc::new(Mutex::new(false));
 
-    // Add welcome message
-    app_state.chat_history.push(("system".to_string(),
-        format!("Connected to agent: {}\nType your query and press Enter. Commands: help, exit, quit", agent_name)));
+    // Don't add welcome message yet - it will show after greeting is dismissed
+    // app_state.chat_history.push(("system".to_string(),
+    //     format!("Connected to agent: {}\nType your query and press Enter. Commands: help, exit, quit", agent_name)));
 
-    // Draw initial screen
+    // Draw initial screen with greeting
     terminal.draw(|f| ui(f, agent_name, &app_state))?;
 
     // Main loop
