@@ -12,7 +12,7 @@ use ratatui::{
     backend::CrosstermBackend,
     Terminal,
     prelude::*,
-    widgets::{Block, Borders, Paragraph, Wrap, Gauge},
+    widgets::{Block, Borders, Paragraph, Wrap, Gauge, Scrollbar, ScrollbarOrientation, ScrollbarState},
     text::{Line, Span},
     style::{Modifier, Color, Style},
     layout::{Layout, Direction, Alignment, Constraint},
@@ -143,6 +143,7 @@ struct AppState {
     input_tokens: u32,
     output_tokens: u32,
     context_window: u32, // Max context window for model
+    chat_scroll_offset: u16, // Scroll offset for chat history
 }
 
 impl AppState {
@@ -176,6 +177,7 @@ impl AppState {
             input_tokens: 0,
             output_tokens: 0,
             context_window,
+            chat_scroll_offset: 0,
         }
     }
 
@@ -214,6 +216,18 @@ impl AppState {
         // Rough estimate: ~4 characters per token
         let estimated_tokens = (text.len() / 4) as u32;
         self.output_tokens = self.output_tokens.saturating_add(estimated_tokens);
+    }
+
+    fn scroll_up(&mut self, amount: u16) {
+        self.chat_scroll_offset = self.chat_scroll_offset.saturating_add(amount);
+    }
+
+    fn scroll_down(&mut self, amount: u16) {
+        self.chat_scroll_offset = self.chat_scroll_offset.saturating_sub(amount);
+    }
+
+    fn auto_scroll_to_bottom(&mut self) {
+        self.chat_scroll_offset = 0;
     }
 }
 
@@ -288,12 +302,26 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
 
         // Handle user input (non-blocking)
         if crossterm::event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
-                match key.code {
-                    KeyCode::Char('c') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
-                        break;
-                    }
-                    KeyCode::Enter => {
+            let evt = event::read()?;
+            match evt {
+                Event::Key(key) => {
+                    match key.code {
+                        KeyCode::Char('c') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
+                            break;
+                        }
+                        KeyCode::PageUp => {
+                            app_state.scroll_up(5);
+                        }
+                        KeyCode::PageDown => {
+                            app_state.scroll_down(5);
+                        }
+                        KeyCode::Up if key.modifiers == crossterm::event::KeyModifiers::SHIFT => {
+                            app_state.scroll_up(1);
+                        }
+                        KeyCode::Down if key.modifiers == crossterm::event::KeyModifiers::SHIFT => {
+                            app_state.scroll_down(1);
+                        }
+                        KeyCode::Enter => {
                         let trimmed = app_state.current_input.trim();
 
                         if trimmed.is_empty() {
@@ -335,6 +363,8 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
                                                     // Update output tokens based on response length
                                                     app_state.update_token_count(&response);
                                                     app_state.chat_history.push(("assistant".to_string(), response));
+                                                    // Auto-scroll to latest message
+                                                    app_state.auto_scroll_to_bottom();
                                                 }
                                             }
                                             Err(e) => {
@@ -371,7 +401,21 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
                         app_state.current_input.push(c);
                     }
                     _ => {}
+                    }
                 }
+                Event::Mouse(mouse) => {
+                    use crossterm::event::MouseEventKind;
+                    match mouse.kind {
+                        MouseEventKind::ScrollUp => {
+                            app_state.scroll_down(3);
+                        }
+                        MouseEventKind::ScrollDown => {
+                            app_state.scroll_up(3);
+                        }
+                        _ => {}
+                    }
+                }
+                _ => {}
             }
         }
 
@@ -490,21 +534,45 @@ fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
         chat_lines.push(Line::from(input_spans));
     }
 
-    // Calculate scroll to keep input visible at bottom
+    // Calculate scroll position with manual scroll offset
     let visible_height = chunks[0].height.saturating_sub(3) as usize; // Account for borders and padding
     let total_lines = chat_lines.len();
-    let scroll_offset = if total_lines > visible_height {
+
+    // If user hasn't manually scrolled, auto-scroll to show input at bottom
+    let mut scroll_offset = if total_lines > visible_height {
         total_lines.saturating_sub(visible_height)
     } else {
         0
     };
 
-    let chat_para = Paragraph::new(chat_lines)
+    // Apply manual scroll offset (user scrolling up/down)
+    if app.chat_scroll_offset > 0 {
+        scroll_offset = scroll_offset.saturating_add(app.chat_scroll_offset as usize);
+    } else if app.chat_scroll_offset == 0 && app.agent_busy == false {
+        // Auto-scroll to bottom when not scrolled and agent is idle
+        scroll_offset = if total_lines > visible_height {
+            total_lines.saturating_sub(visible_height)
+        } else {
+            0
+        };
+    }
+
+    let chat_para = Paragraph::new(chat_lines.clone())
         .block(chat_block)
         .wrap(Wrap { trim: true })
         .scroll((scroll_offset as u16, 0));
 
+    // Render scrollbar with state
+    let mut scrollbar_state = ScrollbarState::new(total_lines)
+        .position(scroll_offset);
+
     f.render_widget(chat_para, chunks[0]);
+    f.render_stateful_widget(
+        Scrollbar::default()
+            .orientation(ScrollbarOrientation::VerticalRight),
+        chunks[0],
+        &mut scrollbar_state,
+    );
 
     // Split right panel into two rows: logs (80%) and stats (20%)
     let right_panel = Layout::default()
