@@ -206,10 +206,23 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
         .with(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
 
-    // Setup terminal
+    // Setup terminal with panic hook for proper cleanup
     enable_raw_mode()?;
     let mut stdout = io::stdout();
     execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+
+    // Setup panic hook to restore terminal on panic
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            io::stdout(),
+            LeaveAlternateScreen,
+            DisableMouseCapture
+        );
+        default_hook(panic_info);
+    }));
+
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
