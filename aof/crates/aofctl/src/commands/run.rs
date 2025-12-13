@@ -162,10 +162,12 @@ impl AppState {
 
         // Create greeting message with ASCII art
         let greeting = r#"
-  ███   ███   ███████
- █   █ █   █     █
- █████ █   █     █
- █   █  ███      █
+████╗  ████╗ ████████╗
+██╔═██╗██╔═██╗██╔═════╝
+██████║██║ ██║█████╗
+██╔═██║██║ ██║██╔══╝
+██║ ██║╚████╔╝██║
+╚═╝ ╚═╝ ╚═══╝ ╚═╝
 
 Agentic Ops Framework
 aof.sh"#;
