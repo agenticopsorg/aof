@@ -2,8 +2,9 @@ use anyhow::{Context, Result};
 use aof_core::AgentConfig;
 use aof_runtime::Runtime;
 use std::fs;
-use std::io::{self, IsTerminal};
+use std::io::{self, IsTerminal, Write};
 use std::sync::{Arc, Mutex};
+use std::sync::mpsc::{channel, Receiver, Sender};
 use tracing::info;
 use crate::resources::ResourceType;
 use ratatui::{
@@ -21,6 +22,27 @@ use crossterm::{
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::util::SubscriberInitExt;
+
+/// Log writer that sends log lines to an mpsc channel
+struct LogWriter(Arc<Mutex<Sender<String>>>);
+
+impl Write for LogWriter {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        let text = String::from_utf8_lossy(buf);
+        for line in text.lines() {
+            if !line.is_empty() {
+                let _ = self.0.lock().unwrap().send(line.to_string());
+            }
+        }
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        Ok(())
+    }
+}
 
 /// Execute a resource (agent, workflow, job) with configuration and input
 pub async fn execute(
@@ -95,10 +117,11 @@ struct AppState {
     execution_time_ms: u128,
     message_count: usize,
     spinner_state: u8,
+    log_receiver: Receiver<String>,
 }
 
 impl AppState {
-    fn new() -> Self {
+    fn new(log_receiver: Receiver<String>) -> Self {
         Self {
             chat_history: Vec::new(),
             current_input: String::new(),
@@ -109,6 +132,18 @@ impl AppState {
             execution_time_ms: 0,
             message_count: 0,
             spinner_state: 0,
+            log_receiver,
+        }
+    }
+
+    fn consume_logs(&mut self) {
+        // Drain all available logs from the receiver (non-blocking)
+        while let Ok(log) = self.log_receiver.try_recv() {
+            // Keep only last 1000 logs to avoid memory bloat
+            if self.logs.len() >= 1000 {
+                self.logs.remove(0);
+            }
+            self.logs.push(log);
         }
     }
 
@@ -135,6 +170,22 @@ impl AppState {
 
 /// Run agent in interactive REPL mode with two-column TUI
 async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &str) -> Result<()> {
+    // Create log channel
+    let (log_tx, log_rx) = channel::<String>();
+
+    // Setup tracing to capture logs
+    let log_tx_clone = Arc::new(Mutex::new(log_tx));
+    let fmt_layer = tracing_subscriber::fmt::layer()
+        .with_writer(move || LogWriter(log_tx_clone.clone()))
+        .with_ansi(false)
+        .with_level(true)
+        .with_target(true);
+
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(tracing_subscriber::EnvFilter::from_default_env())
+        .init();
+
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -142,8 +193,8 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
-    // Initialize app state
-    let mut app_state = AppState::new();
+    // Initialize app state with log receiver
+    let mut app_state = AppState::new(log_rx);
     let should_quit = Arc::new(Mutex::new(false));
 
     // Add welcome message
@@ -222,6 +273,9 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
             app_state.update_execution_time();
         }
 
+        // Consume any new log messages from the channel
+        app_state.consume_logs();
+
         // Redraw UI
         terminal.draw(|f| ui(f, agent_name, &app_state))?;
     }
@@ -243,9 +297,6 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
 fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
     // Minimalist black and white color scheme
     let primary_white = Color::White;
-    let text_white = Color::White;
-    let text_gray = Color::DarkGray;
-    let emphasis_white = Color::White;
 
     // Main layout with footer for metrics
     let main_layout = Layout::default()
