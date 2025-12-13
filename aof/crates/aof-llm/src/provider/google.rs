@@ -198,7 +198,9 @@ impl GoogleModel {
 
         let content = candidate
             .content
-            .parts
+            .as_ref()
+            .map(|c| c.parts.as_slice())
+            .unwrap_or_default()
             .iter()
             .filter_map(|p| match p {
                 GeminiPart::Text { text } => Some(text.clone()),
@@ -210,7 +212,9 @@ impl GoogleModel {
         // Parse function calls
         let tool_calls: Vec<ToolCall> = candidate
             .content
-            .parts
+            .as_ref()
+            .map(|c| c.parts.as_slice())
+            .unwrap_or_default()
             .iter()
             .enumerate()
             .filter_map(|(i, p)| match p {
@@ -432,11 +436,13 @@ fn parse_gemini_stream_chunk(line: &str) -> Option<AofResult<StreamChunk>> {
     let candidate = candidates.first()?;
 
     // Handle content delta
-    for part in &candidate.content.parts {
-        if let GeminiPart::Text { text } = part {
-            return Some(Ok(StreamChunk::ContentDelta {
-                delta: text.clone(),
-            }));
+    if let Some(content) = &candidate.content {
+        for part in &content.parts {
+            if let GeminiPart::Text { text } = part {
+                return Some(Ok(StreamChunk::ContentDelta {
+                    delta: text.clone(),
+                }));
+            }
         }
     }
 
@@ -548,7 +554,8 @@ struct GeminiResponse {
 
 #[derive(Debug, Deserialize)]
 struct GeminiCandidate {
-    content: GeminiContent,
+    #[serde(default)]
+    content: Option<GeminiContent>,
     #[serde(rename = "finishReason")]
     finish_reason: Option<String>,
 }
