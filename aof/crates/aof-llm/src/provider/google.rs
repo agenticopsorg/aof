@@ -215,11 +215,21 @@ impl GoogleModel {
             return Err(AofError::model("No content in Gemini response - possible safety filter or API error"));
         }
 
-        let content = candidate
+        // Validate that parts are present and not empty
+        let content_parts = candidate
             .content
             .as_ref()
-            .map(|c| c.parts.as_slice())
-            .unwrap_or_default()
+            .map(|c| &c.parts)
+            .ok_or_else(|| AofError::model("Missing parts in Gemini response content"))?;
+
+        if content_parts.is_empty() {
+            tracing::warn!("[GOOGLE] Empty parts array in response candidate");
+            return Err(AofError::model(
+                "Empty response from Gemini - no parts in content. This may indicate a model processing issue or safety filter.",
+            ));
+        }
+
+        let content = content_parts
             .iter()
             .filter_map(|p| match p {
                 GeminiPart::Text { text } => Some(text.clone()),
@@ -229,11 +239,7 @@ impl GoogleModel {
             .join("");
 
         // Parse function calls
-        let tool_calls: Vec<ToolCall> = candidate
-            .content
-            .as_ref()
-            .map(|c| c.parts.as_slice())
-            .unwrap_or_default()
+        let tool_calls: Vec<ToolCall> = content_parts
             .iter()
             .enumerate()
             .filter_map(|(i, p)| match p {
@@ -267,6 +273,12 @@ impl GoogleModel {
                 output_tokens: u.candidates_token_count,
             })
             .unwrap_or_default();
+
+        // Warn if both content and tool_calls are empty (valid but unusual)
+        if content.is_empty() && tool_calls.is_empty() {
+            tracing::warn!("[GOOGLE] Response has neither text content nor tool calls - finish_reason: {:?}",
+                candidate.finish_reason);
+        }
 
         Ok(ModelResponse {
             content,

@@ -434,14 +434,14 @@ impl AgentExecutor {
         if let Some(memory) = &self.memory {
             warn!("[EXECUTOR] Restoring conversation history from memory...");
             self.restore_conversation_history(context, memory).await?;
-            warn!("[EXECUTOR] Memory restore complete");
+            warn!("[EXECUTOR] Memory restore complete, messages count: {}", context.messages.len());
         }
 
-        // Add user message if not already in history
-        if context.messages.is_empty() {
-            warn!("[EXECUTOR] Adding user message to context: {:?}", context.input.chars().take(50).collect::<String>());
-            context.add_message(MessageRole::User, context.input.clone());
-        }
+        // Always add the current user input to the message history for this execution
+        // This is critical for multi-turn conversations - even if we restored history,
+        // we need to add the NEW user query that triggered this execution
+        warn!("[EXECUTOR] Adding current user input to context: {:?}", context.input.chars().take(50).collect::<String>());
+        context.add_message(MessageRole::User, context.input.clone());
 
         let mut iteration = 0;
         let max_iterations = self.config.max_iterations;
