@@ -196,6 +196,25 @@ impl GoogleModel {
 
         let candidate = candidates.first().unwrap();
 
+        // Check if content is missing entirely
+        if candidate.content.is_none() {
+            // Check if there's safety feedback
+            if let Some(prompt_feedback) = response.prompt_feedback {
+                if !prompt_feedback.safety_ratings.is_empty() {
+                    let safety_info = prompt_feedback.safety_ratings
+                        .iter()
+                        .map(|r| format!("{}={:?}", r.category, r.probability))
+                        .collect::<Vec<_>>()
+                        .join(", ");
+                    return Err(AofError::model(format!(
+                        "Content blocked by safety filter: {}",
+                        safety_info
+                    )));
+                }
+            }
+            return Err(AofError::model("No content in Gemini response - possible safety filter or API error"));
+        }
+
         let content = candidate
             .content
             .as_ref()
