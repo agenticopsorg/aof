@@ -144,7 +144,6 @@ struct AppState {
     output_tokens: u32,
     context_window: u32, // Max context window for model
     chat_scroll_offset: u16, // Scroll offset for chat history
-    show_greeting: bool, // Show greeting screen on startup
 }
 
 impl AppState {
@@ -161,8 +160,27 @@ impl AppState {
             _ => 128000, // default
         };
 
+        // Create greeting message with ASCII art
+        let greeting = r#"
+···············································
+:                                             :
+:   ████╗  ████╗ ████████╗                    :
+:  ██╔═██╗██╔═██╗██╔═════╝                    :
+:  ██████║██║ ██║█████╗                       :
+:  ██╔═██║██║ ██║██╔══╝                       :
+:  ██║ ██║╚████╔╝██║                          :
+:  ╚═╝ ╚═╝ ╚═══╝ ╚═╝                          :
+:                                             :
+:        Agentic Ops Framework                :
+:              aof.sh                         :
+:                                             :
+···············································"#;
+
+        let mut chat_history = Vec::new();
+        chat_history.push(("system".to_string(), greeting.to_string()));
+
         Self {
-            chat_history: Vec::new(),
+            chat_history,
             current_input: String::new(),
             logs: Vec::new(),
             agent_busy: false,
@@ -179,7 +197,6 @@ impl AppState {
             output_tokens: 0,
             context_window,
             chat_scroll_offset: 0,
-            show_greeting: true,
         }
     }
 
@@ -307,16 +324,6 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
             let evt = event::read()?;
             match evt {
                 Event::Key(key) => {
-                    // If showing greeting, dismiss it on any key press
-                    if app_state.show_greeting {
-                        app_state.show_greeting = false;
-                        // Add welcome message when greeting is dismissed
-                        app_state.chat_history.push(("system".to_string(),
-                            format!("Connected to agent: {}\nType your query and press Enter. Commands: help, exit, quit", agent_name)));
-                        terminal.draw(|f| ui(f, agent_name, &app_state))?;
-                        continue;
-                    }
-
                     match key.code {
                         KeyCode::Char('c') if key.modifiers == crossterm::event::KeyModifiers::CONTROL => {
                             break;
@@ -457,120 +464,8 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     Ok(())
 }
 
-/// Render the welcome/greeting screen with ASCII art
-fn render_greeting(f: &mut Frame, agent_name: &str, model_name: &str, _tools: &[String]) {
-    let size = f.size();
-
-    // Main layout
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
-        .margin(2)
-        .constraints([
-            Constraint::Min(1),
-        ])
-        .split(size);
-
-    // ASCII art welcome message
-    let welcome_lines = vec![
-        Line::from(""),
-        Line::from("···············································"),
-        Line::from(":                                             :"),
-        Line::from(vec![
-            Span::raw(":   "),
-            Span::styled("████╗", Style::default().fg(Color::LightMagenta)),
-            Span::raw("  "),
-            Span::styled("████╗", Style::default().fg(Color::LightGreen)),
-            Span::raw(" "),
-            Span::styled("████████╗", Style::default().fg(Color::Yellow)),
-            Span::raw("                    :"),
-        ]),
-        Line::from(vec![
-            Span::raw(":  "),
-            Span::styled("██╔═██╗", Style::default().fg(Color::LightMagenta)),
-            Span::styled("██╔═██╗", Style::default().fg(Color::LightGreen)),
-            Span::styled("██╔═════╝", Style::default().fg(Color::Yellow)),
-            Span::raw("                    :"),
-        ]),
-        Line::from(vec![
-            Span::raw(":  "),
-            Span::styled("██████║", Style::default().fg(Color::LightBlue)),
-            Span::styled("██║ ██║", Style::default().fg(Color::LightCyan)),
-            Span::styled("█████╗", Style::default().fg(Color::LightRed)),
-            Span::raw("                       :"),
-        ]),
-        Line::from(vec![
-            Span::raw(":  "),
-            Span::styled("██╔═██║", Style::default().fg(Color::LightBlue)),
-            Span::styled("██║ ██║", Style::default().fg(Color::LightCyan)),
-            Span::styled("██╔══╝", Style::default().fg(Color::LightRed)),
-            Span::raw("                       :"),
-        ]),
-        Line::from(vec![
-            Span::raw(":  "),
-            Span::styled("██║ ██║", Style::default().fg(Color::Magenta)),
-            Span::styled("╚████╔╝", Style::default().fg(Color::Green)),
-            Span::styled("██║", Style::default().fg(Color::Red)),
-            Span::raw("                          :"),
-        ]),
-        Line::from(vec![
-            Span::raw(":  "),
-            Span::styled("╚═╝ ╚═╝", Style::default().fg(Color::Magenta)),
-            Span::raw(" "),
-            Span::styled("╚═══╝", Style::default().fg(Color::Green)),
-            Span::raw(" "),
-            Span::styled("╚═╝", Style::default().fg(Color::Red)),
-            Span::raw("                          :"),
-        ]),
-        Line::from(":                                             :"),
-        Line::from(vec![
-            Span::styled(
-                ":        Agentic Ops Framework",
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
-            ),
-            Span::raw("                :"),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                ":              aof.sh",
-                Style::default().fg(Color::Gray),
-            ),
-            Span::raw("                         :"),
-        ]),
-        Line::from(":                                             :"),
-        Line::from("···············································"),
-        Line::from(""),
-        Line::from(vec![
-            Span::styled(
-                format!("Agent: {}", agent_name),
-                Style::default().fg(Color::Gray),
-            ),
-            Span::raw(" │ "),
-            Span::styled(
-                format!("Model: {}", model_name),
-                Style::default().fg(Color::Gray),
-            ),
-        ]),
-        Line::from(vec![
-            Span::styled(
-                "Press any key to begin... ",
-                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
-            ),
-        ]),
-    ];
-
-    let welcome = Paragraph::new(welcome_lines)
-        .alignment(Alignment::Center)
-        .style(Style::default());
-    f.render_widget(welcome, chunks[0]);
-}
-
 /// Render the TUI with elegant professional styling for DevOps engineers
 fn ui(f: &mut Frame, agent_name: &str, app: &AppState) {
-    // Show greeting screen if first launch
-    if app.show_greeting {
-        return render_greeting(f, agent_name, &app.model_name, &app.tools);
-    }
-
     let tools_str = if app.tools.is_empty() {
         "none".to_string()
     } else {
