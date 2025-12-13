@@ -1,0 +1,9 @@
+name: system-tools-test
+model: gemini-2.0-flash
+provider: google
+system_prompt: "You are a helpful assistant with access to shell and system tools. You can execute shell commands and provide the output to the user."
+tools:
+  - shell
+max_iterations: 3
+temperature: 0.7
+max_tokens: 1000

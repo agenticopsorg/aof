@@ -84,8 +84,8 @@ impl Runtime {
             let has_mcp_tools = config.tools.iter().any(|t| !system_tools.contains(&t.as_str()));
 
             if has_system_tools && !has_mcp_tools {
-                debug!("Agent has only system tools, skipping MCP initialization");
-                None
+                debug!("Agent has only system tools, creating system executor");
+                Some(self.create_system_executor(&config.tools)?)
             } else if has_mcp_tools {
                 Some(self.create_tool_executor(&config.tools).await?)
             } else {
@@ -362,6 +362,17 @@ impl Runtime {
         }))
     }
 
+    // Helper: Create system tool executor for shell/kubectl commands
+    fn create_system_executor(
+        &self,
+        tool_names: &[String],
+    ) -> AofResult<Arc<dyn ToolExecutor>> {
+        info!("Creating system tool executor with {} tools", tool_names.len());
+        Ok(Arc::new(SystemToolExecutor {
+            tool_names: tool_names.to_vec(),
+        }))
+    }
+
     // Helper: Create memory backend
     fn create_memory(&self, _config: &AgentConfig) -> AofResult<Arc<SimpleMemory>> {
         let backend = InMemoryBackend::new();
@@ -427,6 +438,211 @@ impl ToolExecutor for McpToolExecutor {
     fn get_tool(&self, _name: &str) -> Option<Arc<dyn Tool>> {
         // MCP tools are dynamically resolved, not stored as objects
         None
+    }
+}
+
+/// System tool executor for shell, kubectl, and other local commands
+struct SystemToolExecutor {
+    tool_names: Vec<String>,
+}
+
+#[async_trait]
+impl ToolExecutor for SystemToolExecutor {
+    async fn execute_tool(
+        &self,
+        name: &str,
+        input: ToolInput,
+    ) -> AofResult<aof_core::ToolResult> {
+        debug!("Executing system tool: {}", name);
+        let start = std::time::Instant::now();
+
+        // Extract command from input arguments
+        let command = if let Some(serde_json::Value::String(cmd)) = input.arguments.get("command") {
+            cmd.clone()
+        } else if let Some(serde_json::Value::String(cmd)) = input.arguments.get("_") {
+            // Fallback for positional argument
+            cmd.clone()
+        } else {
+            return Err(AofError::tool(format!(
+                "Tool {} requires 'command' argument",
+                name
+            )));
+        };
+
+        // Execute the command based on tool type
+        let result = match name {
+            "shell" | "bash" | "sh" => {
+                // Execute shell command
+                self.execute_shell_command(&command).await
+            }
+            "kubectl" => {
+                // Execute kubectl command
+                self.execute_kubectl_command(&command).await
+            }
+            "python" => {
+                // Execute Python code
+                self.execute_command("python3", &[&command]).await
+            }
+            "node" => {
+                // Execute Node.js code
+                self.execute_command("node", &["-e", &command]).await
+            }
+            _ => Err(AofError::tool(format!(
+                "Unknown system tool: {}",
+                name
+            ))),
+        };
+
+        let execution_time_ms = start.elapsed().as_millis() as u64;
+
+        match result {
+            Ok(data) => Ok(aof_core::ToolResult {
+                success: true,
+                data,
+                error: None,
+                execution_time_ms,
+            }),
+            Err(e) => Ok(aof_core::ToolResult {
+                success: false,
+                data: serde_json::json!({}),
+                error: Some(e.to_string()),
+                execution_time_ms,
+            }),
+        }
+    }
+
+    fn list_tools(&self) -> Vec<ToolDefinition> {
+        self.tool_names
+            .iter()
+            .map(|name| {
+                let (description, parameters) = match name.as_str() {
+                    "shell" | "bash" | "sh" => (
+                        "Execute shell commands".to_string(),
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "Shell command to execute"
+                                }
+                            },
+                            "required": ["command"]
+                        }),
+                    ),
+                    "kubectl" => (
+                        "Execute kubectl commands against Kubernetes cluster".to_string(),
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "kubectl command to execute (e.g., 'get pods', 'describe node')"
+                                }
+                            },
+                            "required": ["command"]
+                        }),
+                    ),
+                    "python" => (
+                        "Execute Python code".to_string(),
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "Python code to execute"
+                                }
+                            },
+                            "required": ["command"]
+                        }),
+                    ),
+                    "node" => (
+                        "Execute Node.js code".to_string(),
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "JavaScript code to execute"
+                                }
+                            },
+                            "required": ["command"]
+                        }),
+                    ),
+                    _ => (
+                        format!("System tool: {}", name),
+                        serde_json::json!({
+                            "type": "object",
+                            "properties": {
+                                "command": {
+                                    "type": "string",
+                                    "description": "Command to execute"
+                                }
+                            }
+                        }),
+                    ),
+                };
+
+                ToolDefinition {
+                    name: name.clone(),
+                    description,
+                    parameters,
+                }
+            })
+            .collect()
+    }
+
+    fn get_tool(&self, _name: &str) -> Option<Arc<dyn Tool>> {
+        // System tools are executed directly, not stored as objects
+        None
+    }
+}
+
+impl SystemToolExecutor {
+    async fn execute_shell_command(&self, command: &str) -> AofResult<serde_json::Value> {
+        self.execute_command("sh", &["-c", command]).await
+    }
+
+    async fn execute_kubectl_command(&self, command: &str) -> AofResult<serde_json::Value> {
+        // Parse kubectl command
+        let args: Vec<&str> = command.split_whitespace().collect();
+        self.execute_command("kubectl", &args).await
+    }
+
+    async fn execute_command(
+        &self,
+        program: &str,
+        args: &[&str],
+    ) -> AofResult<serde_json::Value> {
+        debug!(
+            "Executing command: {} {}",
+            program,
+            args.join(" ")
+        );
+
+        let output = tokio::process::Command::new(program)
+            .args(args)
+            .output()
+            .await
+            .map_err(|e| AofError::tool(format!(
+                "Failed to execute {}: {}",
+                program, e
+            )))?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let exit_code = output.status.code().unwrap_or(-1);
+
+        debug!(
+            "Command exit code: {}, stdout: {}, stderr: {}",
+            exit_code, stdout, stderr
+        );
+
+        Ok(serde_json::json!({
+            "exit_code": exit_code,
+            "stdout": stdout,
+            "stderr": stderr,
+            "success": output.status.success()
+        }))
     }
 }
 
