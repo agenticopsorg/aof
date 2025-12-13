@@ -71,8 +71,7 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
     let interactive = input.is_none() && io::stdin().is_terminal();
 
     if interactive {
-        // For interactive mode, suppress normal logging - we'll use TUI logs instead
-        // Load agent with minimal logging
+        // Load agent configuration
         let config_content = fs::read_to_string(config)
             .with_context(|| format!("Failed to read config file: {}", config))?;
 
@@ -81,7 +80,7 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
 
         let agent_name = agent_config.name.clone();
 
-        // Create runtime and load agent (logs suppressed)
+        // Create runtime and load agent
         let mut runtime = Runtime::new();
         runtime
             .load_agent_from_config(agent_config)
@@ -192,7 +191,7 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     // Create log channel
     let (log_tx, log_rx) = channel::<String>();
 
-    // Setup tracing to capture logs
+    // Setup tracing to capture logs into the channel instead of stdout
     let log_tx_clone = Arc::new(Mutex::new(log_tx));
     let fmt_layer = tracing_subscriber::fmt::layer()
         .with_writer(move || LogWriter(log_tx_clone.clone()))
@@ -200,11 +199,12 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
         .with_level(true)
         .with_target(true);
 
-    // Try to initialize tracing, but ignore if already initialized
-    let _ = tracing_subscriber::registry()
+    // Initialize tracing with the LogWriter layer (no console output)
+    // In interactive mode, main.rs skips the fmt layer, so we can initialize here
+    tracing_subscriber::registry()
         .with(fmt_layer)
         .with(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+        .init();
 
     // Setup terminal
     enable_raw_mode()?;
