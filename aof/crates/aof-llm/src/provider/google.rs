@@ -480,6 +480,7 @@ struct GeminiRequest {
 #[derive(Debug, Serialize, Deserialize)]
 struct GeminiContent {
     role: String,
+    #[serde(default)]
     parts: Vec<GeminiPart>,
 }
 
