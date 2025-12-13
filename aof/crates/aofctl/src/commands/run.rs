@@ -181,10 +181,11 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
         .with_level(true)
         .with_target(true);
 
-    tracing_subscriber::registry()
+    // Try to initialize tracing, but ignore if already initialized
+    let _ = tracing_subscriber::registry()
         .with(fmt_layer)
         .with(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     // Setup terminal
     enable_raw_mode()?;
