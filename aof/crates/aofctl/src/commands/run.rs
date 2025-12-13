@@ -200,11 +200,11 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
         .with_target(true);
 
     // Initialize tracing with the LogWriter layer (no console output)
-    // In interactive mode, main.rs skips the fmt layer, so we can initialize here
-    tracing_subscriber::registry()
+    // In interactive mode, main.rs skips tracing entirely, so we initialize here
+    let _ = tracing_subscriber::registry()
         .with(fmt_layer)
         .with(tracing_subscriber::EnvFilter::from_default_env())
-        .init();
+        .try_init();
 
     // Setup terminal
     enable_raw_mode()?;
