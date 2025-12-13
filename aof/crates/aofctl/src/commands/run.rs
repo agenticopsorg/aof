@@ -67,9 +67,35 @@ pub async fn execute(
 
 /// Run an agent with configuration
 async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()> {
+    // Check if interactive mode should be enabled (when no input provided and stdin is a TTY)
+    let interactive = input.is_none() && io::stdin().is_terminal();
+
+    if interactive {
+        // For interactive mode, suppress normal logging - we'll use TUI logs instead
+        // Load agent with minimal logging
+        let config_content = fs::read_to_string(config)
+            .with_context(|| format!("Failed to read config file: {}", config))?;
+
+        let agent_config: AgentConfig = serde_yaml::from_str(&config_content)
+            .with_context(|| format!("Failed to parse agent config from: {}", config))?;
+
+        let agent_name = agent_config.name.clone();
+
+        // Create runtime and load agent (logs suppressed)
+        let mut runtime = Runtime::new();
+        runtime
+            .load_agent_from_config(agent_config)
+            .await
+            .context("Failed to load agent")?;
+
+        // Launch interactive REPL mode with TUI log capture
+        run_agent_interactive(&runtime, &agent_name, output).await?;
+        return Ok(());
+    }
+
+    // Non-interactive mode: normal logging to console
     info!("Loading agent config from: {}", config);
 
-    // Load and parse agent configuration
     let config_content = fs::read_to_string(config)
         .with_context(|| format!("Failed to read config file: {}", config))?;
 
@@ -85,13 +111,6 @@ async fn run_agent(config: &str, input: Option<&str>, output: &str) -> Result<()
         .load_agent_from_config(agent_config)
         .await
         .context("Failed to load agent")?;
-
-    // Check if interactive mode should be enabled (when no input provided and stdin is a TTY)
-    if input.is_none() && io::stdin().is_terminal() {
-        // Interactive REPL mode - only when stdin is a TTY (terminal)
-        run_agent_interactive(&runtime, &agent_name, output).await?;
-        return Ok(());
-    }
 
     // Single execution mode
     let input_str = input.unwrap_or("default input");
