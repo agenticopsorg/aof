@@ -457,134 +457,87 @@ async fn run_agent_interactive(runtime: &Runtime, agent_name: &str, _output: &st
     Ok(())
 }
 
-/// Render the welcome/greeting screen with bar charts
-fn render_greeting(f: &mut Frame, agent_name: &str, model_name: &str, tools: &[String]) {
+/// Render the welcome/greeting screen with ASCII art
+fn render_greeting(f: &mut Frame, agent_name: &str, model_name: &str, _tools: &[String]) {
     let size = f.size();
-
-    // Color palette inspired by professional DevOps tools
-    let colors = vec![
-        Color::LightMagenta,  // Pink
-        Color::LightGreen,    // Green
-        Color::Yellow,        // Yellow
-        Color::LightBlue,     // Blue
-        Color::LightCyan,     // Cyan
-        Color::LightRed,      // Red
-    ];
 
     // Main layout
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .margin(2)
         .constraints([
-            Constraint::Length(3),     // Title
-            Constraint::Min(20),       // Charts area
-            Constraint::Length(4),     // Instructions
+            Constraint::Min(1),
         ])
         .split(size);
 
-    // Title with branding
-    let title_lines = vec![
+    // ASCII art welcome message
+    let welcome_lines = vec![
         Line::from(""),
+        Line::from("···············································"),
+        Line::from(":                                             :"),
+        Line::from(vec![
+            Span::raw(":   "),
+            Span::styled("████╗", Style::default().fg(Color::LightMagenta)),
+            Span::raw("  "),
+            Span::styled("████╗", Style::default().fg(Color::LightGreen)),
+            Span::raw(" "),
+            Span::styled("████████╗", Style::default().fg(Color::Yellow)),
+            Span::raw("                    :"),
+        ]),
+        Line::from(vec![
+            Span::raw(":  "),
+            Span::styled("██╔═██╗", Style::default().fg(Color::LightMagenta)),
+            Span::styled("██╔═██╗", Style::default().fg(Color::LightGreen)),
+            Span::styled("██╔═════╝", Style::default().fg(Color::Yellow)),
+            Span::raw("                    :"),
+        ]),
+        Line::from(vec![
+            Span::raw(":  "),
+            Span::styled("██████║", Style::default().fg(Color::LightBlue)),
+            Span::styled("██║ ██║", Style::default().fg(Color::LightCyan)),
+            Span::styled("█████╗", Style::default().fg(Color::LightRed)),
+            Span::raw("                       :"),
+        ]),
+        Line::from(vec![
+            Span::raw(":  "),
+            Span::styled("██╔═██║", Style::default().fg(Color::LightBlue)),
+            Span::styled("██║ ██║", Style::default().fg(Color::LightCyan)),
+            Span::styled("██╔══╝", Style::default().fg(Color::LightRed)),
+            Span::raw("                       :"),
+        ]),
+        Line::from(vec![
+            Span::raw(":  "),
+            Span::styled("██║ ██║", Style::default().fg(Color::Magenta)),
+            Span::styled("╚████╔╝", Style::default().fg(Color::Green)),
+            Span::styled("██║", Style::default().fg(Color::Red)),
+            Span::raw("                          :"),
+        ]),
+        Line::from(vec![
+            Span::raw(":  "),
+            Span::styled("╚═╝ ╚═╝", Style::default().fg(Color::Magenta)),
+            Span::raw(" "),
+            Span::styled("╚═══╝", Style::default().fg(Color::Green)),
+            Span::raw(" "),
+            Span::styled("╚═╝", Style::default().fg(Color::Red)),
+            Span::raw("                          :"),
+        ]),
+        Line::from(":                                             :"),
         Line::from(vec![
             Span::styled(
-                "   ⚙️  Agentic Ops Framework v0.1.11",
-                Style::default()
-                    .fg(Color::White)
-                    .add_modifier(Modifier::BOLD),
+                ":        Agentic Ops Framework",
+                Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
             ),
+            Span::raw("                :"),
         ]),
-        Line::from(""),
-    ];
-    let title = Paragraph::new(title_lines)
-        .alignment(Alignment::Center)
-        .style(Style::default());
-    f.render_widget(title, chunks[0]);
-
-    // Charts area - split into three columns
-    let chart_chunks = Layout::default()
-        .direction(Direction::Horizontal)
-        .constraints([
-            Constraint::Percentage(33),
-            Constraint::Percentage(33),
-            Constraint::Percentage(34),
-        ])
-        .split(chunks[1]);
-
-    // Chart 1: Model Capabilities
-    let model_chart = BarChart::default()
-        .block(
-            Block::default()
-                .title(" Model Capabilities ")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(colors[0]))
-        )
-        .data(
-            BarGroup::default()
-                .label("Features".into())
-                .bars(&[
-                    Bar::default().value(80).label("Speed".into()).style(Style::default().fg(colors[0])),
-                    Bar::default().value(92).label("Accuracy".into()).style(Style::default().fg(colors[1])),
-                    Bar::default().value(1000000).label("Context".into()).style(Style::default().fg(colors[2])),
-                ])
-        )
-        .bar_width(3)
-        .bar_gap(1)
-        .max(1000000)
-        .style(Style::default().fg(Color::White));
-    f.render_widget(model_chart, chart_chunks[0]);
-
-    // Chart 2: Tools Available
-    let tools_len = tools.len() as u64;
-    let tool_chart = BarChart::default()
-        .block(
-            Block::default()
-                .title(" Available Tools ")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(colors[3]))
-        )
-        .data(
-            BarGroup::default()
-                .label("Tools".into())
-                .bars(&[
-                    Bar::default()
-                        .value(tools_len.min(10))
-                        .label(format!("{}", tools_len).into())
-                        .style(Style::default().fg(colors[3])),
-                ])
-        )
-        .bar_width(8)
-        .max(10)
-        .style(Style::default().fg(Color::White));
-    f.render_widget(tool_chart, chart_chunks[1]);
-
-    // Chart 3: System Status
-    let status_chart = BarChart::default()
-        .block(
-            Block::default()
-                .title(" System Status ")
-                .title_alignment(Alignment::Center)
-                .borders(Borders::ALL)
-                .border_type(ratatui::widgets::BorderType::Rounded)
-                .border_style(Style::default().fg(colors[5]))
-        )
-        .data(
-            BarGroup::default()
-                .label("Ready".into())
-                .bars(&[
-                    Bar::default().value(100).label("Status".into()).style(Style::default().fg(colors[4])),
-                ])
-        )
-        .bar_width(8)
-        .max(100)
-        .style(Style::default().fg(Color::White));
-    f.render_widget(status_chart, chart_chunks[2]);
-
-    // Instructions at the bottom
-    let instructions = vec![
+        Line::from(vec![
+            Span::styled(
+                ":              aof.sh",
+                Style::default().fg(Color::Gray),
+            ),
+            Span::raw("                         :"),
+        ]),
+        Line::from(":                                             :"),
+        Line::from("···············································"),
         Line::from(""),
         Line::from(vec![
             Span::styled(
@@ -604,10 +557,11 @@ fn render_greeting(f: &mut Frame, agent_name: &str, model_name: &str, tools: &[S
             ),
         ]),
     ];
-    let instructions_para = Paragraph::new(instructions)
+
+    let welcome = Paragraph::new(welcome_lines)
         .alignment(Alignment::Center)
         .style(Style::default());
-    f.render_widget(instructions_para, chunks[2]);
+    f.render_widget(welcome, chunks[0]);
 }
 
 /// Render the TUI with elegant professional styling for DevOps engineers
