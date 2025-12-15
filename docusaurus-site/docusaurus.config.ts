@@ -15,7 +15,7 @@ const config: Config = {
   },
 
   // Set the production url of your site here
-  url: 'https://aof.sh',
+  url: 'https://docs.aof.sh',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
   baseUrl: '/',
@@ -44,7 +44,7 @@ const config: Config = {
           // Please change this to your repo.
           // Remove this to remove the "edit this page" links.
           editUrl:
-            'https://github.com/agenticopsorg/aof/tree/main/docusaurus-site/',
+            'https://github.com/agenticopsorg/aof/tree/main/',
         },
         blog: false, // Disable blog for now
         theme: {

@@ -32,11 +32,21 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Guides',
+      items: [
+        'guides/deployment',
+        'guides/local-testing',
+        'guides/testing-mcp',
+      ],
+    },
+    {
+      type: 'category',
       label: 'Reference',
       items: [
         'reference/agent-spec',
         'reference/agentflow-spec',
         'reference/aofctl',
+        'reference/aofctl-examples',
       ],
     },
   ],
