@@ -28,7 +28,7 @@
 **Network Requirements:**
 - Outbound HTTPS (443) for LLM provider APIs
 - Inbound ports for webhook servers (default: 8080)
-- Low latency connection to LLM providers (<100ms recommended)
+- Low latency connection to LLM providers (&lt;100ms recommended)
 
 ### Dependencies
 

@@ -533,6 +533,6 @@ ResourceType::NewResource => {
 
 ---
 
-For more information, see:
-- [kubectl-refactor-summary.md](./kubectl-refactor-summary.md) - Implementation details
-- [README.md](../README.md) - AOF framework overview
+For more information, see the AOF framework documentation:
+- [Getting Started](/docs/getting-started) - Quick start guide
+- [Core Concepts](/docs/concepts) - Key architecture concepts

@@ -201,8 +201,8 @@ echo '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{}}' | \
 
 ## Performance
 
-- **Startup**: <100ms
-- **Tool execution**: <1ms per call
+- **Startup**: &lt;100ms
+- **Tool execution**: &lt;1ms per call
 - **Memory usage**: ~2MB
 - **No external dependencies**: All operations in-process
 
